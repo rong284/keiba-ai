@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 from bs4 import BeautifulSoup
+from bs4.dammit import UnicodeDammit
 from tqdm import tqdm
 
 
@@ -26,6 +27,38 @@ def normalize_race_id(file: Path) -> str:
     return m.group(1)
 
 
+def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    netkeibaの結果テーブルの列名を正規化する（文字化け対策）
+    26列前提：race_id + 21(HTML) + 4(ID) みたいな構成を想定
+    """
+    # 追加したID列が末尾にある前提
+    id_cols = ["horse_id", "jockey_id", "trainer_id", "owner_id"]
+    if all(c in df.columns for c in id_cols):
+        base_cols = [c for c in df.columns if c not in id_cols]
+        # race_id も base 側
+        # HTML由来列名が文字化けしても「位置」で直す
+        expected_html = [
+            "着順","枠番","馬番","馬名","性齢","斤量","騎手","タイム","着差","通過","上り",
+            "単勝","人気","馬体重","調教師","馬主","賞金(万円)"
+        ]
+        # base_cols は race_id + HTML列 なので race_id を除いたぶんを当てる
+        if len(base_cols) >= 1 + len(expected_html):
+            new_base = ["race_id"] + expected_html[: len(base_cols)-1]
+            # 余った列がある場合は元名を残す
+            if len(new_base) < len(base_cols):
+                new_base += base_cols[len(new_base):]
+            rename_map = dict(zip(base_cols, new_base))
+            df = df.rename(columns=rename_map)
+
+        # ID列も確実に末尾へ
+        df = df[[c for c in df.columns if c not in id_cols] + id_cols]
+
+    # 空白除去
+    df.columns = [str(c).replace(" ", "") for c in df.columns]
+    return df
+
+
 def load_html_bytes(path: Path) -> bytes:
     """
     .html / .bin / .gz などに対応してHTML bytesを返す
@@ -38,12 +71,21 @@ def load_html_bytes(path: Path) -> bytes:
 
 
 def strip_weird_tags(html_bytes: bytes) -> bytes:
-    # netkeibaで稀に混じる謎タグ対策（元コード踏襲）
-    return (
-        html_bytes
-        .replace(b"<diary_snap_cut>", b"")
-        .replace(b"</diary_snap_cut>", b"")
-    )
+    # タグごと消す（開閉どっちも）
+    html_bytes = re.sub(rb"</?diary_snap_cut>", b"", html_bytes)
+    return html_bytes
+
+
+def decode_html_bytes(html_bytes: bytes) -> str:
+    """
+    文字化けしにくいようにエンコーディングを推測してdecodeする
+    """
+    dammit = UnicodeDammit(html_bytes)
+    if dammit.unicode_markup is not None:
+        return dammit.unicode_markup
+    # 最後の手段
+    return html_bytes.decode("utf-8", errors="replace")
+
 
 
 def extract_table_html(soup: BeautifulSoup) -> str:
@@ -105,18 +147,24 @@ def safe_assign(df: pd.DataFrame, col: str, values: list[str], fill: str = "") -
 
 
 def parse_one_race(path: Path) -> pd.DataFrame:
-    """
-    レースHTML 1ファイル -> 結果テーブルDataFrame（行=馬）を返す
-    """
     race_id = normalize_race_id(path)
 
     html_bytes = strip_weird_tags(load_html_bytes(path))
-    soup = BeautifulSoup(html_bytes, "lxml")
 
-    table_html = extract_table_html(soup)
+    # meta等を見てencoding推定してからSoupへ
+    text = decode_html_bytes(html_bytes)
+    soup = BeautifulSoup(text, "lxml")
+
+    # テーブル抽出（class順序・追加classに強い）
+    table_tag = soup.select_one("table.race_table_01.nk_tb_common") or soup.select_one("table.race_table_01")
+    if table_tag is None:
+        title = soup.title.get_text(strip=True) if soup.title else "(no title)"
+        raise ValueError(f"race_table_01 not found (title={title})")
+
+    table_html = str(table_tag)
     df = pd.read_html(io.StringIO(table_html))[0]
 
-    # ID追加（テーブルをBeautifulSoup化してリンク抽出）
+    # ID抽出はテーブル部分だけから行う（ノイズに強い）
     table_soup = BeautifulSoup(table_html, "lxml")
 
     horse_ids = extract_ids_from_table(table_soup, r"^/horse/", 10)
@@ -129,7 +177,6 @@ def parse_one_race(path: Path) -> pd.DataFrame:
     safe_assign(df, "trainer_id", trainer_ids)
     safe_assign(df, "owner_id", owner_ids)
 
-    # race_id を index or column に（後段で扱いやすいよう両方でもOK）
     df.insert(0, "race_id", race_id)
     return df
 
@@ -160,7 +207,7 @@ def get_race_table(year: int, html_dir: Path, out_path: Path) -> pd.DataFrame:
 
     # 保存
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    concat_df.to_csv(out_path, sep="\t", index=False)
+    concat_df.to_csv(out_path, sep=",", index=False, encoding="utf-8-sig")
 
     # 失敗ログ
     if failed:
@@ -181,7 +228,7 @@ def main():
     args = ap.parse_args()
 
     html_dir = Path(args.html_dir) if args.html_dir else (root / "data/html/race" / str(args.year))
-    out_path = Path(args.out) if args.out else (root / "data/rawdf/result" / f"result_{args.year}.tsv")
+    out_path = Path(args.out) if args.out else (root / "data/rawdf/result" / f"result_{args.year}.csv")
 
     get_race_table(args.year, html_dir=html_dir, out_path=out_path)
 
