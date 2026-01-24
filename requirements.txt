@@ -1,0 +1,5 @@
+playwright
+tqdm
+pandas
+beautifulsoup4
+lxml

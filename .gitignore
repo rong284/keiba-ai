@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# venv
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+data/logs/
+
+# Data (DO NOT COMMIT)
+/data/
+*.html
+*.html.gz
+*.bin
+*.csv
+*.tsv
+*.parquet
+
+# Secrets
+.venv/
+.env.*
+*.key
+*.pem
+
+# Playwright
+ms-playwright/
