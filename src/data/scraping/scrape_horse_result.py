@@ -3,7 +3,7 @@ import asyncio
 import gzip
 import random
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 import pandas as pd
 from tqdm import tqdm
@@ -21,6 +21,35 @@ USER_AGENTS = [
 def project_root() -> Path:
     # ~/work/keiba-ai/src/data/scraping/scrape_horse_result.py -> ~/work/keiba-ai
     return Path(__file__).resolve().parents[3]
+
+def resolve_result_files(results_path: str, results_glob: Optional[str]) -> list[Path]:
+    """
+    results_path: ファイル/ディレクトリ/グロブいずれでも受け付ける
+    results_glob: 指定があればこちらを優先
+    """
+    if results_glob:
+        return sorted(Path().glob(results_glob))
+    path = Path(results_path)
+    if path.is_dir():
+        return sorted(path.glob("result*.csv"))
+    if any(ch in results_path for ch in ["*", "?", "["]):
+        return sorted(Path().glob(results_path))
+    if path.is_file():
+        return [path]
+    return []
+
+def load_horse_ids(files: list[Path], sep: str, limit: int | None) -> list[str]:
+    ids: set[str] = set()
+    for f in files:
+        df = pd.read_csv(f, sep=sep, encoding="utf-8-sig")
+        if "horse_id" not in df.columns:
+            raise ValueError(f"horse_id column not found: {f}")
+        for hid in df["horse_id"].dropna().astype(str).tolist():
+            ids.add(hid)
+    result = sorted(ids)
+    if limit is not None:
+        return result[:limit]
+    return result
 
 def out_path(out_dir: Path, horse_id: str) -> Path:
     return out_dir / f"{horse_id}.html.gz"
@@ -109,9 +138,11 @@ async def run(
     # キューに詰める（skip対応）
     q: asyncio.Queue = asyncio.Queue()
     total = 0
+    skipped = 0
     for hid in horse_ids:
         hid = str(hid)
         if skip and out_path(out_dir, hid).is_file():
+            skipped += 1
             continue
         await q.put(hid)
         total += 1
@@ -155,6 +186,8 @@ async def run(
         await q.join()
 
     # ログ出力
+    if skip:
+        print(f"skipped(existing)={skipped}")
     (log_dir / "scrape_saved.txt").write_text("\n".join(saved), encoding="utf-8")
     (log_dir / "scrape_failed.txt").write_text("\n".join(failed), encoding="utf-8")
     print(f"saved={len(saved)} failed={len(failed)} (logs: {log_dir})")
@@ -163,12 +196,14 @@ def main():
     root = project_root()
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--results-path", default=str(root / "data/rawdf/result/result_2024.csv"))
+    ap.add_argument("--results-path", default=str(root / "data/rawdf/result"))
+    ap.add_argument("--results-glob", default=None)
     ap.add_argument("--out-dir", default=str(root / "data/html/horse"))
     ap.add_argument("--log-dir", default=str(root / "data/logs"))
-    ap.add_argument("--sep", default="\t")
+    ap.add_argument("--sep", default=",")
     ap.add_argument("--skip", action="store_true", default=True)
     ap.add_argument("--no-skip", dest="skip", action="store_false")
+    ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--concurrency", type=int, default=1)  # まずは1推奨
     ap.add_argument("--max-retry", type=int, default=3)
     ap.add_argument("--sleep-min", type=float, default=2.5)
@@ -177,8 +212,10 @@ def main():
     ap.add_argument("--headed", dest="headless", action="store_false")
     args = ap.parse_args()
 
-    df = pd.read_csv(args.results_path, sep=args.sep)
-    horse_ids = df["horse_id"].dropna().astype(str).unique()
+    files = resolve_result_files(args.results_path, args.results_glob)
+    if not files:
+        raise FileNotFoundError(f"No result csv files found. path={args.results_path} glob={args.results_glob}")
+    horse_ids = load_horse_ids(files, sep=args.sep, limit=args.limit)
 
     asyncio.run(
         run(
