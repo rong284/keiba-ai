@@ -59,6 +59,16 @@ def save_gz(path: Path, html: str) -> None:
     with gzip.open(path, "wb") as f:
         f.write(html.encode("utf-8"))
 
+def load_existing_ids(out_dir: Path) -> set[str]:
+    ids: set[str] = set()
+    if not out_dir.exists():
+        return ids
+    for p in out_dir.glob("*.html.gz"):
+        name = p.name
+        if name.endswith(".html.gz"):
+            ids.add(name[:-8])
+    return ids
+
 async def fetch_html(page: Page, url: str, timeout_ms: int = 45_000) -> str:
     await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
     await page.wait_for_selector("body", timeout=30_000)
@@ -139,9 +149,10 @@ async def run(
     q: asyncio.Queue = asyncio.Queue()
     total = 0
     skipped = 0
+    existing_ids = load_existing_ids(out_dir) if skip else set()
     for hid in horse_ids:
         hid = str(hid)
-        if skip and out_path(out_dir, hid).is_file():
+        if skip and hid in existing_ids:
             skipped += 1
             continue
         await q.put(hid)
