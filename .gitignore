@@ -7,6 +7,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+outputs/
+
 # venv
 .venv/
 venv/

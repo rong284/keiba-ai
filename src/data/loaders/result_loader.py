@@ -1,5 +1,6 @@
 from pathlib import Path
 import pandas as pd
+from tqdm.auto import tqdm
 from src.data.preprocess.result import preprocess_race_results_df
 
 def load_results(glob_pattern: str = "data/rawdf/result/result_*.csv") -> pd.DataFrame:
@@ -8,7 +9,7 @@ def load_results(glob_pattern: str = "data/rawdf/result/result_*.csv") -> pd.Dat
         raise FileNotFoundError(f"No files matched: {glob_pattern}")
 
     dfs = []
-    for p in paths:
+    for p in tqdm(paths, desc="result csv", leave=False):
         raw = pd.read_csv(p, sep=",")  # ★ここだけ
         raw.columns = [str(c).strip().lstrip("\ufeff") for c in raw.columns]  # 念のため
 
@@ -19,4 +20,3 @@ def load_results(glob_pattern: str = "data/rawdf/result/result_*.csv") -> pd.Dat
     out = out.drop_duplicates(subset=["race_id", "horse_id"], keep="last")
     out = out.sort_values(["race_id", "umaban"]).reset_index(drop=True)
     return out
-

@@ -1,4 +1,5 @@
 import pandas as pd
+from tqdm.auto import tqdm
 from src.data.features.feature_engineering import (
     add_horse_history_features,
     add_people_history_features,
@@ -53,7 +54,10 @@ def build_train_table(df_result: pd.DataFrame, df_race_info: pd.DataFrame, df_ho
     Returns:
         学習用テーブル（df_resultベース + race_info + hr_rank_mean_3）
     """
+    steps = tqdm(total=8, desc="build train table", leave=False)
+
     # 1) レース情報結合（race_date 付与）
+    steps.set_description("join race info")
     base = df_result.merge(
         df_race_info.rename(columns={"date": "race_date"}),
         on="race_id",
@@ -61,26 +65,42 @@ def build_train_table(df_result: pd.DataFrame, df_race_info: pd.DataFrame, df_ho
         validate="many_to_one"
     )
     base["race_date"] = pd.to_datetime(base["race_date"])
+    steps.update(1)
 
     # 2) レース基本特徴量（条件スイッチ用）
+    steps.set_description("race basic features")
     train = add_race_basic_features(base)
+    steps.update(1)
 
     # 3) レース内相対特徴量（レース内の軽重・大小を表現）
+    steps.set_description("race relative features")
     train = add_race_relative_features(train)
+    steps.update(1)
 
     # 4) 過去戦績・休み明け特徴量（リーク無し）
+    steps.set_description("horse history features")
     train = add_horse_history_features(train, df_horse)
+    steps.update(1)
 
     # 5) レース内 hr 系統計（抜けてる馬や荒れやすさ）
+    steps.set_description("race hr stats")
     train = add_race_hr_stats(train)
+    steps.update(1)
 
     # 6) 騎手/調教師/馬主の過去成績（同日除外でリーク防止）
+    steps.set_description("people history features")
     train = add_people_history_features(train)
+    steps.update(1)
 
     # 7) 並び安定化
+    steps.set_description("sort rows")
     train = train.sort_values(["race_id", "umaban"]).reset_index(drop=True)
+    steps.update(1)
 
     # 8) 列順を整える（分析しやすく）
+    steps.set_description("reorder columns")
     train = reorder_train_columns(train)
+    steps.update(1)
+    steps.close()
 
     return train
