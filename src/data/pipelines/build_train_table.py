@@ -1,5 +1,11 @@
 import pandas as pd
-from src.data.features.horse_history import add_last3_mean_rank
+from src.data.features.feature_engineering import (
+    add_horse_history_features,
+    add_people_history_features,
+    add_race_basic_features,
+    add_race_hr_stats,
+    add_race_relative_features,
+)
 
 def reorder_train_columns(df: pd.DataFrame) -> pd.DataFrame:
     # 目的変数は最後固定
@@ -12,10 +18,12 @@ def reorder_train_columns(df: pd.DataFrame) -> pd.DataFrame:
 
         # race info（前に出す）
         "race_date", "place", "race_type", "around", "course_len",
-        "weather", "ground_state", "race_class",
+        "dist_bin", "weather", "ground_state", "race_class",
+        "race_season", "n_horses",
 
         # horse day-of-race info
-        "wakuban", "umaban", "sex", "age", "impost", "weight", "weight_diff",
+        "wakuban", "umaban",
+        "sex", "age", "impost", "weight", "weight_diff",
 
         # people IDs
         "jockey_id", "trainer_id", "owner_id",
@@ -40,7 +48,7 @@ def build_train_table(df_result: pd.DataFrame, df_race_info: pd.DataFrame, df_ho
     """
     主テーブル df_result を軸に、
     df_race_info を race_id で結合して race_date を付与し、
-    df_horse の過去戦績特徴量（直近3走平均着順）をリーク無しで付与する。
+    df_horse の過去戦績特徴量や休み明け特徴量をリーク無しで付与する。
 
     Returns:
         学習用テーブル（df_resultベース + race_info + hr_rank_mean_3）
@@ -54,13 +62,25 @@ def build_train_table(df_result: pd.DataFrame, df_race_info: pd.DataFrame, df_ho
     )
     base["race_date"] = pd.to_datetime(base["race_date"])
 
-    # 2) 過去戦績特徴量（直近3走平均着順）を付与
-    train = add_last3_mean_rank(base, df_horse)
+    # 2) レース基本特徴量（条件スイッチ用）
+    train = add_race_basic_features(base)
 
-    # 3) 並び安定化
+    # 3) レース内相対特徴量（レース内の軽重・大小を表現）
+    train = add_race_relative_features(train)
+
+    # 4) 過去戦績・休み明け特徴量（リーク無し）
+    train = add_horse_history_features(train, df_horse)
+
+    # 5) レース内 hr 系統計（抜けてる馬や荒れやすさ）
+    train = add_race_hr_stats(train)
+
+    # 6) 騎手/調教師/馬主の過去成績（同日除外でリーク防止）
+    train = add_people_history_features(train)
+
+    # 7) 並び安定化
     train = train.sort_values(["race_id", "umaban"]).reset_index(drop=True)
 
-    # 4) 列順を整える（分析しやすく）
+    # 8) 列順を整える（分析しやすく）
     train = reorder_train_columns(train)
 
     return train
