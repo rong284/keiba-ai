@@ -2,6 +2,15 @@ import numpy as np
 import pandas as pd
 
 
+def _rolling_mean_by_horse(h: pd.DataFrame, col: str, window: int) -> pd.Series:
+    return (
+        h.groupby("horse_id")[col]
+        .rolling(window=window, min_periods=1)
+        .mean()
+        .reset_index(level=0, drop=True)
+    )
+
+
 def _dist_bin(series: pd.Series) -> pd.Series:
     # 距離を粗いビンにまとめる（距離帯の条件差を拾う）
     # bins: <=1400, 1401-1800, 1801-2200, 2201-2600, 2601+
@@ -133,7 +142,8 @@ def add_horse_history_features(df_base: pd.DataFrame, df_horse: pd.DataFrame) ->
         h["dist_bin"] = _dist_bin(h["course_len"])
 
     # 過去のみで集計するため、当日成績をshiftで除外
-    h = h.sort_values(["horse_id", "date"])
+    # ties on the same date should be stable for reproducibility
+    h = h.sort_values(["horse_id", "date"], kind="mergesort")
     h["rank_prev"] = h.groupby("horse_id")["rank"].shift(1)
     h["rank_prev2"] = h.groupby("horse_id")["rank"].shift(2)
     h["prize_prev"] = h.groupby("horse_id")["prize"].shift(1)
@@ -146,12 +156,7 @@ def add_horse_history_features(df_base: pd.DataFrame, df_horse: pd.DataFrame) ->
     # 直近平均着順
     for w in [3, 5]:
         # hr_rank_mean_3 / hr_rank_mean_5
-        h[f"hr_rank_mean_{w}"] = (
-            h.groupby("horse_id")["rank_prev"]
-            .rolling(window=w, min_periods=1)
-            .mean()
-            .reset_index(level=0, drop=True)
-        )
+        h[f"hr_rank_mean_{w}"] = _rolling_mean_by_horse(h, "rank_prev", window=w)
     # 通算（過去のみ）
     # hr_rank_mean_all
     h["hr_rank_mean_all"] = (
@@ -262,27 +267,20 @@ def add_horse_history_features(df_base: pd.DataFrame, df_horse: pd.DataFrame) ->
     h["prev_date"] = h.groupby("horse_id")["date"].shift(1)
     # days_since_last
     h["days_since_last"] = (h["date"] - h["prev_date"]).dt.days
-    # rest_bin
-    h["rest_bin"] = pd.cut(
-        h["days_since_last"],
-        bins=[-np.inf, 14, 28, 56, 84, np.inf],
-        labels=[0, 1, 2, 3, 4],
-    ).astype("Int64")
-    # is_layoff_60
-    h["is_layoff_60"] = (h["days_since_last"] >= 60).astype("Int64")
-    # runs_last_90d / runs_last_180d
+    # runs_last_90d
     h["runs_last_90d"] = _runs_last_n_days(h, 90).astype("Int64")
-    h["runs_last_180d"] = _runs_last_n_days(h, 180).astype("Int64")
 
     # 付与に使う列をまとめて結合
     feat_cols = [c for c in h.columns if c.startswith("hr_")] + [
         "days_since_last",
-        "rest_bin",
-        "is_layoff_60",
         "runs_last_90d",
-        "runs_last_180d",
     ]
     feat = h[["horse_id", "date"] + feat_cols].rename(columns={"date": "race_date"})
+
+    # 既に同名の特徴がある場合は衝突を避ける（_x/_y を作らない）
+    conflict = set(base.columns) & set(feat.columns) - {"horse_id", "race_date"}
+    if conflict:
+        base = base.drop(columns=sorted(conflict))
 
     out = base.merge(
         feat,
@@ -333,7 +331,15 @@ def add_race_hr_stats(df: pd.DataFrame) -> pd.DataFrame:
             }
         )
 
-    stats = out.groupby("race_id")["hr_rank_mean_3"].apply(race_stats).reset_index()
+    stats = out.groupby("race_id")["hr_rank_mean_3"].apply(race_stats)
+    stats = stats.reset_index()
+    # merge 衝突回避（pandasの挙動差で同名列が混入する場合がある）
+    overlap = set(stats.columns) & set(out.columns) - {"race_id"}
+    if overlap:
+        stats = stats.drop(columns=sorted(overlap))
+    # pandas のバージョンによって level_1 が入ることがあるため除去
+    if "level_1" in stats.columns:
+        stats = stats.drop(columns=["level_1"])
     # まれに重複キーが出るケースを吸収（merge validate のため一意化）
     stats = stats.groupby("race_id", as_index=False).first()
     out = out.merge(stats, on="race_id", how="left", validate="many_to_one")
@@ -341,6 +347,9 @@ def add_race_hr_stats(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_people_history_features(df: pd.DataFrame) -> pd.DataFrame:
+    # people history features are disabled (jockey/trainer/owner)
+    return df.copy()
+
     base = df.copy()
     base["race_date"] = pd.to_datetime(base["race_date"], errors="coerce")
 
