@@ -19,5 +19,7 @@
     "bagging_freq": 1,
     "lambda_l2": 1.0,
     "verbosity": -1
-  }
+  },
+  "calib_fit_end": "2025-03-31",
+  "calib_sel_end": "2025-06-30"
 }

@@ -39,6 +39,8 @@ def train_binary(
     cat_cols: List[str],
     params: Dict,
     seed: int = 42,
+    num_boost_round: int = 5000,
+    early_stopping_rounds: Optional[int] = 200,
 ) -> BinaryTrainResult:
     """
     LightGBMのtrain APIで2値分類を学習する。
@@ -66,7 +68,7 @@ def train_binary(
     valid_sets = []
     valid_names = []
     callbacks = []
-    evals_result = None
+    evals_result: Dict[str, Dict[str, List[float]]] = {}
 
     if va_df is not None:
         y_va = va_df[y_col].values.astype(int)
@@ -85,16 +87,13 @@ def train_binary(
             score = top1_pos_rate_fast(preds, y, order, starts, counts, noise=noise)
             return ("top1_pos_rate", score, True)
 
-        evals_result = {}
-        callbacks = [
-            lgb.record_evaluation(evals_result),
-            lgb.early_stopping(200, first_metric_only=True),
-            lgb.log_evaluation(0),
-        ]
+        callbacks = [lgb.record_evaluation(evals_result), lgb.log_evaluation(0)]
+        if early_stopping_rounds is not None:
+            callbacks.insert(1, lgb.early_stopping(int(early_stopping_rounds), first_metric_only=True))
 
         model = lgb.train(
             p, dtr,
-            num_boost_round=5000,
+            num_boost_round=int(num_boost_round),
             valid_sets=valid_sets,
             valid_names=valid_names,
             feval=feval_top1,
@@ -103,8 +102,13 @@ def train_binary(
         best_iter = int(model.best_iteration)
     else:
         # holdout無し学習（最終学習など）
-        model = lgb.train(p, dtr, num_boost_round=2000)
-        best_iter = int(model.current_iteration())
+        callbacks = [lgb.record_evaluation(evals_result), lgb.log_evaluation(0)]
+        model = lgb.train(
+            p, dtr,
+            num_boost_round=int(num_boost_round),
+            callbacks=callbacks,
+        )
+        best_iter = int(num_boost_round)
 
     return BinaryTrainResult(
         model=model,

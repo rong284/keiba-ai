@@ -46,6 +46,8 @@ def train_rank(
     params: Dict,
     eval_at: List[int],
     seed: int = 42,
+    num_boost_round: int = 5000,
+    early_stopping_rounds: Optional[int] = 200,
 ) -> RankTrainResult:
     """
     LambdaRank（ランキング学習）で学習する。
@@ -65,7 +67,10 @@ def train_rank(
     p.update({
         "objective": "lambdarank",
         "metric": ["ndcg"],
-        "eval_at": eval_at,   # ndcg@k を見たいkのリスト
+        # ndcg@k を見たいkのリスト（LightGBMの標準パラメータ）
+        "eval_at": eval_at,
+        # ndcg_eval_at は eval_at のエイリアス（明示しておく）
+        "ndcg_eval_at": eval_at,
         "seed": seed,
         "data_random_seed": seed,
         "feature_fraction_seed": seed,
@@ -101,22 +106,27 @@ def train_rank(
 
         valid_sets = [dva]
         valid_names = ["valid"]
-        callbacks = [
-            lgb.early_stopping(200),
-            lgb.log_evaluation(0),
-        ]
+        callbacks = [lgb.log_evaluation(0)]
+        if early_stopping_rounds is not None:
+            # ndcg@3 を先頭に置けば、first_metric_only=True で ndcg@3 を監視できる
+            callbacks.insert(0, lgb.early_stopping(int(early_stopping_rounds), first_metric_only=True))
 
         model = lgb.train(
             p, dtr,
-            num_boost_round=5000,
+            num_boost_round=int(num_boost_round),
             valid_sets=valid_sets,
             valid_names=valid_names,
             callbacks=callbacks
         )
         best_iter = int(model.best_iteration)
     else:
-        model = lgb.train(p, dtr, num_boost_round=2000)
-        best_iter = int(model.current_iteration())
+        # holdout無し学習（最終学習など）
+        model = lgb.train(
+            p, dtr,
+            num_boost_round=int(num_boost_round),
+            callbacks=[lgb.log_evaluation(0)],
+        )
+        best_iter = int(num_boost_round)
 
     return RankTrainResult(model=model, best_iter=best_iter)
 
