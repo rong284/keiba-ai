@@ -1,6 +1,6 @@
 from pathlib import Path
 import pandas as pd
-from tqdm.auto import tqdm
+from src.utils.progress import tqdm
 from src.data.preprocess.result import preprocess_race_results_df
 
 def load_results(glob_pattern: str = "data/rawdf/result/result_*.csv") -> pd.DataFrame:

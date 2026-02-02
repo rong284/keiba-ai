@@ -1,23 +1,20 @@
 from __future__ import annotations
 
 import argparse
-import json
-from pathlib import Path
 from typing import Dict
 
 import numpy as np
 import optuna
-import pandas as pd
 
-from src.train.data import DataPaths, load_train_dataframe
-from src.train.split import TimeFold, make_time_folds
-from src.train.features import build_feature_spec
 from src.train.models.lgb_rank import train_rank, predict_rank, make_relevance_from_rank, sort_by_group
 from src.train.metrics import ndcg_at_k
-
-
-def load_config(path: str) -> Dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+from src.train.tuning_common import (
+    build_spec,
+    load_config,
+    load_dataframe,
+    make_fold_pairs,
+    save_optuna_artifacts,
+)
 
 
 def objective_factory(df, fold_pairs, spec, cfg):
@@ -75,21 +72,10 @@ def main(
 ):
     cfg = load_config(config_path)
     out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ---- データ読み込み（学習用テーブル） ----
-    df = load_train_dataframe(DataPaths(
-        result_glob="data/rawdf/result/result_*.csv",
-        horse_glob="data/rawdf/horse/*.csv",
-        race_info_glob="data/rawdf/race_info/*.csv",
-    ))
-
-    # ---- 特徴量仕様（CVと同じ） ----
-    spec = build_feature_spec(df, use_market=bool(cfg["use_market"]))
-
-    # ---- CV folds（cfg["folds"] に従う：=2024まで） ----
-    folds = [TimeFold(*x) for x in cfg["folds"]]
-    fold_pairs = make_time_folds(df, folds, date_col="race_date")
+    df = load_dataframe()
+    spec = build_spec(df, cfg)
+    fold_pairs = make_fold_pairs(df, cfg)
 
     # ---- Optuna ----
     seed = int(cfg["random_seed"])
@@ -104,9 +90,6 @@ def main(
     best["_best_value_mean_ndcg_at_3"] = float(study.best_value)
     best["_n_trials"] = n_trials
 
-    out_path = out_dir / "optuna_best_params_rank.json"
-    out_path.write_text(json.dumps(best, ensure_ascii=False, indent=2), encoding="utf-8")
-
     # ついでに全試行のログもCSV保存（後で分析しやすい）
     trials = []
     for t in study.trials:
@@ -114,7 +97,7 @@ def main(
         row["value"] = t.value
         row["state"] = str(t.state)
         trials.append(row)
-    pd.DataFrame(trials).to_csv(out_dir / "optuna_trials_rank.csv", index=False, encoding="utf-8")
+    out_path = save_optuna_artifacts(out_dir, best, trials, prefix="rank")
 
     print("[best_value mean(ndcg@3)]", study.best_value)
     print("[saved]", out_path)

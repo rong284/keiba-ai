@@ -1,5 +1,5 @@
 import pandas as pd
-from tqdm.auto import tqdm
+from src.utils.progress import tqdm
 from src.data.features.feature_engineering import (
     add_horse_history_features,
     add_people_history_features,

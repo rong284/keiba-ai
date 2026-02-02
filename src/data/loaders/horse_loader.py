@@ -1,7 +1,7 @@
 # src/data/loaders/horse_loader.py
 from pathlib import Path
 import pandas as pd
-from tqdm.auto import tqdm
+from src.utils.progress import tqdm
 from src.data.preprocess.horse import preprocess_horse_results_df
 
 def load_horse_results(glob_pattern: str = "data/rawdf/horse/horse_*.csv") -> pd.DataFrame:

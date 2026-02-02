@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 import pandas as pd
-from tqdm.auto import tqdm
+from src.utils.progress import tqdm
 
 from src.train.models.lgb_rank import sort_by_group
 from src.train.data import DataPaths, load_train_dataframe
-from src.train.split import TimeFold, make_time_folds, make_holdout
+from src.train.split import TimeFold, make_time_folds, make_holdout, make_train_only, clip_test_end
+from src.train.date_plan import resolve_date_plan
+from src.train.reporting import (
+    plot_cv_best_iter,
+    plot_cv_metrics_rank,
+    plot_holdout_rank,
+    save_date_plan,
+    write_report,
+)
 from src.train.features import build_feature_spec
 from src.train.metrics import mrr_for_winner, ndcg_at_k, hit_at_k
 from src.train.models.lgb_rank import train_rank, predict_rank, make_relevance_from_rank
@@ -26,6 +34,8 @@ def main(
 ):
     cfg = load_config(config_path)
     out = OutputDirs.create(Path(out_dir))
+    plan = resolve_date_plan(cfg)
+    save_date_plan(out.tab_dir, plan.as_dict())
 
     df = load_train_dataframe(DataPaths(
         result_glob="data/rawdf/result/result_*.csv",
@@ -46,7 +56,7 @@ def main(
     fold_pairs = make_time_folds(df, folds, date_col="race_date")
 
     rows = []
-    for tr_df, va_df, f in tqdm(fold_pairs, desc="cv folds (rank)"):
+    for tr_df, va_df, f in tqdm(fold_pairs, desc="cv folds (rank)", position=0):
         # --- CV loop の中 ---
         tr_s = sort_by_group(tr_df, "race_id")
         va_s = sort_by_group(va_df, "race_id")
@@ -101,7 +111,12 @@ def main(
     save_table_csv(out.tab_dir / "cv_summary_rank.csv", cv_sum)
 
     # ---- 最終ホールドアウト（2025） ----
-    train_A, test2025 = make_holdout(df, cfg["train_end"], cfg["test_start"], date_col="race_date")
+    if plan.eval_enabled and plan.test_start:
+        train_A, test2025 = make_holdout(df, plan.train_end, plan.test_start, date_col="race_date")
+        test2025 = clip_test_end(test2025, plan.test_end, date_col="race_date")
+    else:
+        train_A = make_train_only(df, plan.train_end, date_col="race_date")
+        test2025 = None
 
     # ★CVで決めた best_iter を固定して最終学習（2025は使わない）
     best_iter = int(json.loads((out.tab_dir / "best_iter_from_cv.json").read_text(encoding="utf-8"))["lambdarank"])
@@ -119,20 +134,48 @@ def main(
     )
     save_lgb_model(out.model_dir / "lgb_rank_lambdarank.txt", res.model)
 
-    pred_2025 = predict_rank(res.model, train_A, test2025, spec.feature_cols, spec.cat_cols)
-    rel_2025 = make_relevance_from_rank(test2025)
+    hold = None
+    if test2025 is not None and len(test2025) > 0:
+        pred_2025 = predict_rank(res.model, train_A, test2025, spec.feature_cols, spec.cat_cols)
+        rel_2025 = make_relevance_from_rank(test2025)
 
-    hold = {
-        "n_races": int(test2025["race_id"].nunique()),
-        "mrr_winner": mrr_for_winner(test2025, pred_2025, test2025["rank"].values, seed=int(cfg["random_seed"])),
-        "ndcg@3": ndcg_at_k(test2025, pred_2025, rel_2025, 3, seed=int(cfg["random_seed"])),
-        "ndcg@5": ndcg_at_k(test2025, pred_2025, rel_2025, 5, seed=int(cfg["random_seed"])),
-        "hit_at_1": hit_at_k(test2025, pred_2025, (test2025["rank"].values == 1).astype(int), 1, seed=int(cfg["random_seed"])),
-        "hit_at_3": hit_at_k(test2025, pred_2025, (test2025["rank"].values == 1).astype(int), 3, seed=int(cfg["random_seed"])),
-        "hit_at_5": hit_at_k(test2025, pred_2025, (test2025["rank"].values == 1).astype(int), 5, seed=int(cfg["random_seed"])),
-        "final_num_boost_round": best_iter,
-    }
-    save_json(out.tab_dir / "holdout_rank_2025.json", hold)
+        hold = {
+            "n_races": int(test2025["race_id"].nunique()),
+            "mrr_winner": mrr_for_winner(test2025, pred_2025, test2025["rank"].values, seed=int(cfg["random_seed"])),
+            "ndcg@3": ndcg_at_k(test2025, pred_2025, rel_2025, 3, seed=int(cfg["random_seed"])),
+            "ndcg@5": ndcg_at_k(test2025, pred_2025, rel_2025, 5, seed=int(cfg["random_seed"])),
+            "hit_at_1": hit_at_k(test2025, pred_2025, (test2025["rank"].values == 1).astype(int), 1, seed=int(cfg["random_seed"])),
+            "hit_at_3": hit_at_k(test2025, pred_2025, (test2025["rank"].values == 1).astype(int), 3, seed=int(cfg["random_seed"])),
+            "hit_at_5": hit_at_k(test2025, pred_2025, (test2025["rank"].values == 1).astype(int), 5, seed=int(cfg["random_seed"])),
+            "final_num_boost_round": best_iter,
+        }
+        save_json(out.tab_dir / "holdout_rank_2025.json", hold)
+        plot_holdout_rank(hold, out.fig_dir / "holdout_rank_2025.png")
+
+        pred_out = test2025[["race_id", "horse_id", "umaban", "race_date"]].copy()
+        pred_out["score"] = pred_2025
+        save_table_csv(out.tab_dir / "preds_rank_2025_eval.csv", pred_out)
+
+    plot_cv_best_iter(cv_df, out.fig_dir / "cv_best_iter_rank.png", "CV best_iter (rank)")
+    plot_cv_metrics_rank(cv_df, out.fig_dir / "cv_metrics_rank.png")
+
+    report_lines = [
+        "# Rank training report",
+        f"mode: {plan.mode}",
+        f"train_end: {plan.train_end}",
+        f"test_start: {plan.test_start}",
+        f"test_end: {plan.test_end}",
+        f"eval_enabled: {plan.eval_enabled}",
+        "",
+        f"CV summary: {out.tab_dir / 'cv_summary_rank.csv'}",
+    ]
+    if hold:
+        report_lines += [
+            f"Holdout summary: {out.tab_dir / 'holdout_rank_2025.json'}",
+            "",
+            json.dumps(hold, ensure_ascii=False, indent=2),
+        ]
+    write_report(out.out_dir / "report_rank.md", report_lines)
 
     print("[done] outputs/03_train に保存しました")
 

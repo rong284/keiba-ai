@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Optional
 
 import pandas as pd
 
@@ -41,3 +41,21 @@ def make_holdout(df: pd.DataFrame, train_end: str, test_start: str, date_col: st
     train = d[d[date_col] <= pd.Timestamp(train_end)].copy()
     test = d[d[date_col] >= pd.Timestamp(test_start)].copy()
     return train, test
+
+
+def make_train_only(df: pd.DataFrame, train_end: str, date_col: str = "race_date"):
+    """
+    Train-only split (no holdout).
+    """
+    d = df.copy()
+    d[date_col] = pd.to_datetime(d[date_col])
+    train = d[d[date_col] <= pd.Timestamp(train_end)].copy()
+    return train
+
+
+def clip_test_end(test_df: pd.DataFrame, test_end: Optional[str], date_col: str = "race_date"):
+    if not test_end:
+        return test_df
+    d = test_df.copy()
+    d[date_col] = pd.to_datetime(d[date_col])
+    return d[d[date_col] <= pd.Timestamp(test_end)].copy()

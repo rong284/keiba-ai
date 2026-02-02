@@ -1,7 +1,7 @@
 # src/data/loaders/race_info_loader.py
 from pathlib import Path
 import pandas as pd
-from tqdm.auto import tqdm
+from src.utils.progress import tqdm
 from src.data.preprocess.race_info import preprocess_race_info_df
 
 def load_race_info(glob_pattern: str = "data/rawdf/race_info/race_info_*.csv") -> pd.DataFrame:

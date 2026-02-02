@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
-from tqdm.auto import tqdm
+from src.utils.progress import tqdm
 
 # 既存ローダ・パイプラインをそのまま使う
 from src.data.loaders.result_loader import load_results

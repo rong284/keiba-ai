@@ -1,6 +1,14 @@
 {
   "train_end": "2024-12-31",
   "test_start": "2025-01-01",
+  "date_plan": {
+    "mode": "eval",
+    "train_end": "2024-12-31",
+    "test_start": "2025-01-01",
+    "test_end": "2025-12-31",
+    "prod_train_end": "2025-12-31",
+    "eval_enabled": true
+  },
   "random_seed": 42,
   "use_market": false,
   "eval_at": [3, 5],
