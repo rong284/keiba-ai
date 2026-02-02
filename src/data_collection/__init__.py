@@ -1,3 +1,3 @@
 """
-Data collection and feature engineering pipeline.
+データ収集と特徴量生成のパイプライン。
 """

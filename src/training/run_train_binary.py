@@ -102,7 +102,7 @@ def main(
     cv_df = pd.DataFrame(rows)
     save_table_csv(out.tab_dir / "cv_binary.csv", cv_df)
 
-    # ★追加：targetごとに best_iter を決めて保存（中央値が安定）
+    # ★追加：ターゲットごとに best_iter を決めて保存（中央値が安定）
     best_iter_map = (
         cv_df.groupby("target")["best_iter"]
         .median()

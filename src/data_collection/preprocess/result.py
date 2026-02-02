@@ -1,4 +1,4 @@
-# src/data/preprocess/result.py
+# 旧パス: src/data/preprocess/result.py
 import pandas as pd
 import re
 

@@ -1,4 +1,4 @@
-# src/data/preprocess/race_info.py
+# 旧パス: src/data/preprocess/race_info.py
 import pandas as pd
 import re
 import ast
@@ -9,16 +9,16 @@ from src.data_collection.common.mappings import (
 def preprocess_race_info_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    # info1 / info2 は list 文字列
+    # info1 / info2 はリスト文字列
     df["info1"] = df["info1"].apply(ast.literal_eval)
     df["info2"] = df["info2"].apply(ast.literal_eval)
 
-    # date
+    # 日付
     df["date"] = df["info2"].apply(
         lambda x: pd.to_datetime(x[0], format="%Y年%m月%d日", errors="coerce")
     )
 
-    # place
+    # 開催
     def extract_place(info2):
         if not isinstance(info2, list) or len(info2) < 2:
             return None
@@ -29,10 +29,10 @@ def preprocess_race_info_df(df: pd.DataFrame) -> pd.DataFrame:
         return None
     df["place"] = df["info2"].apply(extract_place)
 
-    # race_type
+    # レース種別
     df["race_type"] = df["info1"].apply(lambda x: RACE_TYPE_MAP.get(str(x[0])[0]) if isinstance(x, list) and len(x) else None)
 
-    # around
+    # 回り
     def extract_around(text):
         if not isinstance(text, str):
             return None
@@ -45,9 +45,9 @@ def preprocess_race_info_df(df: pd.DataFrame) -> pd.DataFrame:
         return None
     df["around"] = df["info1"].apply(lambda x: extract_around(str(x[0])) if isinstance(x, list) and len(x) else None)
 
-    # course_len
+    # 距離
     def extract_course_len(info1):
-        # info1 is a list like ['障芝外', '内2890m', ...]
+        # info1 は ['障芝外', '内2890m', ...] のようなリスト
         if isinstance(info1, list):
             for s in info1:
                 if isinstance(s, str):
@@ -61,7 +61,7 @@ def preprocess_race_info_df(df: pd.DataFrame) -> pd.DataFrame:
         return None
     df["course_len"] = df["info1"].apply(extract_course_len)
 
-    # weather
+    # 天候
     def extract_weather(info1):
         if not isinstance(info1, list):
             return None
@@ -71,7 +71,7 @@ def preprocess_race_info_df(df: pd.DataFrame) -> pd.DataFrame:
         return None
     df["weather"] = df["info1"].apply(extract_weather)
 
-    # ground_state
+    # 馬場状態
     def extract_ground_state(info1):
         if not isinstance(info1, list):
             return None
@@ -83,7 +83,7 @@ def preprocess_race_info_df(df: pd.DataFrame) -> pd.DataFrame:
         return None
     df["ground_state"] = df["info1"].apply(extract_ground_state)
 
-    # race_class
+    # クラス
     df["race_class"] = df["title"].apply(race_class_mapper)
 
     use_cols = [

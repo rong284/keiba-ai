@@ -185,7 +185,7 @@ def main(
 
     rows = []
 
-    # per-model top1
+    # モデル別 top1
     for name, df in [("win", win), ("place", place), ("rank", rank)]:
         if df is None:
             continue
@@ -193,14 +193,14 @@ def main(
         r["model"] = name
         rows.append(r)
 
-    # ensemble top1
+    # アンサンブル top1
     if any(x is not None for x in [win, place, rank]):
         ens = build_ensemble(win, place, rank, weights)
         r = simulate_strategy(ens, payout_map, bet_type, strategy="top1")
         r["model"] = "ensemble"
         rows.append(r)
 
-    # threshold search
+    # threshold探索
     thr_list = []
     if thresholds:
         thr_list = [float(x) for x in thresholds.split(",") if x.strip()]
@@ -225,7 +225,7 @@ def main(
     out_df = pd.DataFrame(rows)
     save_table_csv(out_dir / "return_simulation.csv", out_df)
 
-    # simple plot: ROI vs threshold
+    # 簡易プロット: ROI と threshold
     try:
         import matplotlib.pyplot as plt
 

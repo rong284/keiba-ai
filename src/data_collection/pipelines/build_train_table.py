@@ -15,22 +15,22 @@ def reorder_train_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # 先頭に置きたい（存在するものだけ使う）
     front = [
-        # keys
+        # キー
         "race_id", "horse_id",
 
-        # race info（前に出す）
+        # レース情報（前に出す）
         "race_date", "place", "race_type", "around", "course_len",
         "dist_bin", "weather", "ground_state", "race_class",
         "race_season", "n_horses",
 
-        # horse day-of-race info
+        # 当日馬情報
         "wakuban", "umaban",
         "sex", "age", "impost", "weight", "weight_diff",
 
-        # people IDs
+        # 関係者ID
         "jockey_id", "trainer_id", "owner_id",
 
-        # market（任意）
+        # 市場情報（任意）
         "popularity", "tansho_odds",
     ]
     front = [c for c in front if c in df.columns]

@@ -45,7 +45,7 @@ def make_holdout(df: pd.DataFrame, train_end: str, test_start: str, date_col: st
 
 def make_train_only(df: pd.DataFrame, train_end: str, date_col: str = "race_date"):
     """
-    Train-only split (no holdout).
+    学習のみの分割（holdoutなし）。
     """
     d = df.copy()
     d[date_col] = pd.to_datetime(d[date_col])

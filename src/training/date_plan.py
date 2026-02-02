@@ -19,9 +19,9 @@ class DatePlan:
 
 def resolve_date_plan(cfg: Dict) -> DatePlan:
     """
-    Resolve date split plan with backward compatibility.
-    - eval mode: train_end used for training, test_start/test_end for holdout.
-    - production mode: train_end switches to prod_train_end, evaluation optional.
+    日付分割のプランを後方互換込みで解決する。
+    - eval mode: train_end まで学習、test_start/test_end を holdout に使う
+    - production mode: train_end を prod_train_end に切替、評価は任意
     """
     dp = cfg.get("date_plan", {})
     mode = str(dp.get("mode", "eval"))
@@ -33,7 +33,7 @@ def resolve_date_plan(cfg: Dict) -> DatePlan:
     eval_enabled = bool(dp.get("eval_enabled", True))
 
     if mode == "production":
-        # In production, switch to prod_train_end when provided.
+        # 本番モードでは prod_train_end があればそちらへ切り替える
         if prod_train_end:
             train_end = str(prod_train_end)
         if not eval_enabled:

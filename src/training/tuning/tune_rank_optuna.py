@@ -39,7 +39,7 @@ def objective_factory(df, fold_pairs, spec, cfg):
 
         scores = []
         for tr_df, va_df, _fold in fold_pairs:
-            # group順で揃える（rankingは順序依存）
+            # group順で揃える（ランキングは順序依存）
             tr_s = sort_by_group(tr_df, "race_id")
             va_s = sort_by_group(va_df, "race_id")
 

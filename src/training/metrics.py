@@ -32,7 +32,7 @@ def race_rank_from_pred(df: pd.DataFrame, pred: np.ndarray, race_col: str = "rac
     rng = np.random.RandomState(seed)
     tmp["pred_tb"] = tmp["pred"] + 1e-12 * rng.normal(size=len(tmp))
 
-    # 1が最高順位になるように降順でrank
+    # 1が最高順位になるように降順で順位付け
     return tmp.groupby(race_col)["pred_tb"].rank(ascending=False, method="first")
 
 

@@ -1,4 +1,4 @@
-# src/data/common/mappings.py
+# 旧パス: src/data/common/mappings.py
 import re
 import pandas as pd
 

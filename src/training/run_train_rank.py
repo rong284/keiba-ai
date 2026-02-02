@@ -64,12 +64,12 @@ def main(
 
     rows = []
     for tr_df, va_df, f in tqdm(fold_pairs, desc="cv folds (rank)", position=0):
-        # --- CV loop の中 ---
+        # --- CVループ内 ---
         tr_s = sort_by_group(tr_df, "race_id")
         va_s = sort_by_group(va_df, "race_id")
 
-        # ---- LambdaRank CV ----
-        # early stopping は ndcg@3 を主指標として使いたいので、
+        # ---- LambdaRankのCV ----
+        # early stopping は ndcg@3 を主指標にしたいので、
         # eval_at を [3,5] の順で渡し、first_metric_only=True で止める。
         res = train_rank(
             tr_df=tr_s,

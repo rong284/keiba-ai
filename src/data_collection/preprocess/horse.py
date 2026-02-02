@@ -1,4 +1,4 @@
-# src/data/preprocess/horse.py
+# 旧パス: src/data/preprocess/horse.py
 import pandas as pd
 import re
 from src.data_collection.common.mappings import (
@@ -8,15 +8,15 @@ from src.data_collection.common.mappings import (
 def preprocess_horse_results_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    # date
+    # 日付
     df["date"] = pd.to_datetime(df["日付"], errors="coerce")
 
-    # rank
+    # 着順
     df["rank"] = pd.to_numeric(df["着順"], errors="coerce")
     df = df.dropna(subset=["rank"])
     df["rank"] = df["rank"].astype(int)
 
-    # prize
+    # 賞金
     df["prize"] = pd.to_numeric(df["賞金"], errors="coerce").fillna(0.0)
 
     # rank_diff（着差）
@@ -24,24 +24,24 @@ def preprocess_horse_results_df(df: pd.DataFrame) -> pd.DataFrame:
     rd = pd.to_numeric(df["着差"], errors="coerce")
     df["rank_diff"] = rd.mask(rd < 0, 0)  # 勝ち馬側にマイナス表記が来ても 0 扱い
 
-    # weather
+    # 天候
     df["weather"] = df["天気"].map(WEATHER_MAP)
 
-    # race_type / course_len
+    # レース種別 / 距離
     dist = df["距離"].astype(str)
     df["race_type"] = dist.str[0].map(RACE_TYPE_MAP)
     df["course_len"] = pd.to_numeric(dist.str.extract(r"(\d+)")[0], errors="coerce")
 
-    # ground_state
+    # 馬場状態
     df["ground_state"] = df["馬場"].map(GROUND_MAP)
 
-    # race_class
+    # クラス
     df["race_class"] = df["レース名"].apply(race_class_mapper)
 
-    # n_horses
+    # 頭数
     df["n_horses"] = pd.to_numeric(df["頭数"], errors="coerce")
 
-    # time (mm:ss.s) -> seconds
+    # 走破タイム (mm:ss.s) -> 秒
     def to_seconds(val):
         if pd.isna(val):
             return None
@@ -54,7 +54,7 @@ def preprocess_horse_results_df(df: pd.DataFrame) -> pd.DataFrame:
         return float(m.group(1)) * 60.0 + float(m.group(2))
     df["time_sec"] = df["タイム"].apply(to_seconds)
 
-    # passing (e.g. "8-7-6-7") -> first / avg / last
+    # 通過順 (例: "8-7-6-7") -> 先頭 / 平均 / 最後
     def parse_passing(val):
         if pd.isna(val):
             return (None, None, None)
@@ -78,7 +78,7 @@ def preprocess_horse_results_df(df: pd.DataFrame) -> pd.DataFrame:
     df["passing_avg"] = pass_parsed.apply(lambda x: x[1])
     df["passing_last"] = pass_parsed.apply(lambda x: x[2])
 
-    # last 3f
+    # 上がり3F
     df["up3f"] = pd.to_numeric(df["上り"], errors="coerce")
 
     # place（開催名→コード）

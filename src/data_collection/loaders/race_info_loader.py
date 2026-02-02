@@ -1,4 +1,4 @@
-# src/data/loaders/race_info_loader.py
+# 旧パス: src/data/loaders/race_info_loader.py
 from pathlib import Path
 import pandas as pd
 from src.utils.progress import tqdm

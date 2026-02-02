@@ -22,7 +22,7 @@ USER_AGENTS = [
 
 
 def project_root() -> Path:
-    # ~/work/keiba-ai/src/data/scraping/scrape_race_data.py -> ~/work/keiba-ai
+    # パス例: ~/work/keiba-ai/src/data/scraping/scrape_race_data.py -> ~/work/keiba-ai
     return Path(__file__).resolve().parents[3]
 
 
@@ -60,7 +60,7 @@ async def fetch_with_retry(
 
 
 async def collect_kaisai_dates(page: Page, year: int, sleep_min: float, sleep_max: float) -> list[str]:
-    """カレンダー(month) -> kaisai_date(YYYYMMDD) を収集"""
+    """カレンダー（月） -> kaisai_date(YYYYMMDD) を収集"""
     dates: set[str] = set()
 
     for month in tqdm(range(1, 13), desc=f"calendar {year}", leave=False):
@@ -80,7 +80,7 @@ async def collect_kaisai_dates(page: Page, year: int, sleep_min: float, sleep_ma
 
 
 async def collect_race_ids_for_date(page: Page, kaisai_date: str, sleep_min: float, sleep_max: float) -> list[str]:
-    """race_list(kaisai_date) -> race_id(12桁) をDOMから収集"""
+    """開催日一覧(kaisai_date) -> race_id(12桁) をDOMから収集"""
     url = BASE_RACE_LIST_URL.format(kaisai_date=kaisai_date)
 
     # goto のレスポンスを取ってステータスも見る

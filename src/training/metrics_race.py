@@ -1,4 +1,4 @@
-# src/train/metrics_race.py
+# 旧パス: src/train/metrics_race.py
 from __future__ import annotations
 import numpy as np
 import pandas as pd
@@ -13,7 +13,7 @@ def prep_group_index(race_ids, seed: int = 42):
     race_codes, _ = pd.factorize(race_ids, sort=True)
     race_codes = race_codes.astype(np.int32)
 
-    # レースコード順に並べ替えた order と、グループ開始位置(starts), 件数(counts)
+    # レースコード順に並べ替えた並び順と、グループ開始位置(starts), 件数(counts)
     order = np.argsort(race_codes, kind="mergesort")
     rc = race_codes[order]
     change = np.flatnonzero(rc[1:] != rc[:-1]) + 1
@@ -21,7 +21,7 @@ def prep_group_index(race_ids, seed: int = 42):
     counts = np.diff(np.r_[starts, len(rc)]).astype(np.int32)
 
     rng = np.random.RandomState(seed)
-    noise = 1e-12 * rng.normal(size=len(rc))  # 同点崩し用
+    noise = 1e-12 * rng.normal(size=len(rc))  # 同点崩し用のノイズ
     return order, starts, counts, noise
 
 def top1_pos_rate_fast(preds: np.ndarray, y: np.ndarray, order, starts, counts, noise=None) -> float:
@@ -42,7 +42,7 @@ def top1_pos_rate_fast(preds: np.ndarray, y: np.ndarray, order, starts, counts, 
     max_s = np.maximum.reduceat(s, starts)
     max_rep = np.repeat(max_s, counts)
 
-    # noiseで一意になってる前提 → 各レースで最大の場所が1個
+    # ノイズで一意になっている前提 → 各レースで最大の場所が1個
     pos = np.flatnonzero(s == max_rep)
     top_idx = order[pos]
     return float(np.mean(y[top_idx]))

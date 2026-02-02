@@ -432,7 +432,7 @@ def main(config_path: str, out_dir: str, return_path: str):
         best_path = optuna_dir / f"optuna_best_params_{target_name}.json"
         lgb_params = load_best_params(best_path, cfg["lgb_params"])
 
-        # ---- CV (walk-forward) ----
+        # ---- CV（walk-forward）----
         cv_prob_rows = []
         cv_rows = []
         best_kind_counts: Dict[str, int] = {}
@@ -576,7 +576,7 @@ def main(config_path: str, out_dir: str, return_path: str):
 
         scoreboard_rows.append(cv_score)
 
-        # ---- Final evaluation on 2025 ----
+        # ---- 最終評価（2025 holdout）----
         train_A, test_2025 = make_holdout(df, plan.train_end, plan.test_start, date_col="race_date")
         if test_2025.empty:
             continue
@@ -704,7 +704,7 @@ def main(config_path: str, out_dir: str, return_path: str):
         _plot_equity(fig_dir, f"{target_name}_2025", eq)
         _plot_calibration(fig_dir, f"{target_name}_2025", test_2025[y_col].values.astype(int), test_2025["p_norm"].values, p_cal_ev)
 
-        # band analysis (win only)
+        # band analysis（単勝のみ）
         if target_name == "win" and not picks.empty:
             odds_bins = cfg.get("odds_bins", [1, 2, 5, 10, 20, 30, 50, 100, 1000])
             odds_bins = [np.inf if str(x).lower() == "inf" else float(x) for x in odds_bins]

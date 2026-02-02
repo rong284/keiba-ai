@@ -13,7 +13,7 @@ from src.training.metrics import race_equal_weights
 
 def sort_by_group(df: pd.DataFrame, group_col: str = "race_id") -> pd.DataFrame:
     """
-    Rankingは group（クエリ）単位で Dataset を作るので
+    rankingはgroup（クエリ）単位でDatasetを作るので
     - race_id で並べておく（groupサイズ計算と行順が一致するように）
     """
     return df.sort_values([group_col, "horse_id"]).reset_index(drop=True)
@@ -51,13 +51,13 @@ def train_rank(
 ) -> RankTrainResult:
     """
     LambdaRank（ランキング学習）で学習する。
-    - objective='lambdarank', metric='ndcg' が基本 :contentReference[oaicite:5]{index=5}
+    - objective='lambdarank', metric='ndcg' が基本
     """
     tr = sort_by_group(tr_df, "race_id")
     X_tr = make_X(tr, feature_cols, cat_cols)
     y_tr = make_relevance_from_rank(tr)
 
-    # rankingでも “レース均等” の思想は残す（ただしgroup学習なので重みは慎重に）
+    # rankingでも“レース均等”の思想は残す（ただしgroup学習なので重みは慎重に）
     # ここではサンプル重みを入れる（レース頭数の逆数）
     w_tr = race_equal_weights(tr, "race_id")
 

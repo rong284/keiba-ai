@@ -44,7 +44,7 @@ def train_binary(
 ) -> BinaryTrainResult:
     """
     LightGBMのtrain APIで2値分類を学習する。
-    - va_df があれば early stopping を使う（推奨）:contentReference[oaicite:4]{index=4}
+    - va_df があればアーリーストッピングを使う（推奨）
     """
     y_tr = tr_df[y_col].values.astype(int)
     X_tr = make_X(tr_df, feature_cols, cat_cols)

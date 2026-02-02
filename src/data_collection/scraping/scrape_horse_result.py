@@ -19,7 +19,7 @@ USER_AGENTS = [
 ]
 
 def project_root() -> Path:
-    # ~/work/keiba-ai/src/data/scraping/scrape_horse_result.py -> ~/work/keiba-ai
+    # パス例: ~/work/keiba-ai/src/data/scraping/scrape_horse_result.py -> ~/work/keiba-ai
     return Path(__file__).resolve().parents[3]
 
 def resolve_result_files(results_path: str, results_glob: Optional[str]) -> list[Path]:
@@ -145,7 +145,7 @@ async def run(
     out_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # キューに詰める（skip対応）
+    # キューに詰める（スキップ対応）
     q: asyncio.Queue = asyncio.Queue()
     total = 0
     skipped = 0

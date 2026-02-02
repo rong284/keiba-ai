@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 
 def project_root() -> Path:
-    # ~/work/keiba-ai/src/data/scraping/parse_return_html_to_csv.py -> ~/work/keiba-ai
+    # パス例: ~/work/keiba-ai/src/data/scraping/parse_return_html_to_csv.py -> ~/work/keiba-ai
     return Path(__file__).resolve().parents[3]
 
 

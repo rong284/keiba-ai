@@ -1,3 +1,3 @@
 """
-Evaluation and backtest entrypoints.
+評価とバックテストのエントリポイント。
 """

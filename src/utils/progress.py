@@ -8,7 +8,7 @@ from tqdm.auto import tqdm as _tqdm
 
 def tqdm(*args, **kwargs):
     """
-    Unified tqdm wrapper to reduce messy output across nested loops.
+    ネストした進捗表示でも崩れにくいようにまとめたラッパー。
     """
     kwargs.setdefault("dynamic_ncols", True)
     kwargs.setdefault("leave", False)
@@ -18,6 +18,6 @@ def tqdm(*args, **kwargs):
 
 def log(message: str, **kwargs: Any) -> None:
     """
-    Print without breaking tqdm progress bars.
+    tqdmの進捗バーを崩さずにログを出す。
     """
     _tqdm.write(message, **kwargs)

@@ -24,7 +24,7 @@ def add_last3_mean_rank(df_base: pd.DataFrame, df_horse: pd.DataFrame) -> pd.Dat
     base["race_date"] = pd.to_datetime(base["race_date"], errors="coerce")
     h["date"] = pd.to_datetime(h["date"], errors="coerce")
 
-    # horseごとに時系列ソート
+    # 馬ごとに時系列ソート
     h = h.sort_values(["horse_id", "date"], kind="mergesort")
 
     # 当日を過去に含めない（リーク防止）

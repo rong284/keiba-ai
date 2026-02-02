@@ -1,4 +1,4 @@
-# parse_race_info_html_to_tsv.py
+# 旧ファイル名: parse_race_info_html_to_tsv.py
 import argparse
 import gzip
 import os
@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 
 def project_root() -> Path:
-    # ~/work/keiba-ai/src/data/scraping/parse_race_info_html_to_tsv.py -> ~/work/keiba-ai
+    # パス例: ~/work/keiba-ai/src/data/scraping/parse_race_info_html_to_tsv.py -> ~/work/keiba-ai
     return Path(__file__).resolve().parents[3]
 
 

@@ -1,3 +1,3 @@
 """
-Hyperparameter tuning entrypoints.
+ハイパーパラメータチューニングのエントリポイント。
 """

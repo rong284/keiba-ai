@@ -13,7 +13,7 @@ def _rolling_mean_by_horse(h: pd.DataFrame, col: str, window: int) -> pd.Series:
 
 def _dist_bin(series: pd.Series) -> pd.Series:
     # 距離を粗いビンにまとめる（距離帯の条件差を拾う）
-    # bins: <=1400, 1401-1800, 1801-2200, 2201-2600, 2601+
+    # ビン: <=1400, 1401-1800, 1801-2200, 2201-2600, 2601+
     bins = [-np.inf, 1400, 1800, 2200, 2600, np.inf]
     labels = [0, 1, 2, 3, 4]
     return pd.cut(series, bins=bins, labels=labels).astype("Int64")
@@ -142,7 +142,7 @@ def add_horse_history_features(df_base: pd.DataFrame, df_horse: pd.DataFrame) ->
         h["dist_bin"] = _dist_bin(h["course_len"])
 
     # 過去のみで集計するため、当日成績をshiftで除外
-    # ties on the same date should be stable for reproducibility
+    # 同日内の順序は再現性のため安定ソートにする
     h = h.sort_values(["horse_id", "date"], kind="mergesort")
     h["rank_prev"] = h.groupby("horse_id")["rank"].shift(1)
     h["rank_prev2"] = h.groupby("horse_id")["rank"].shift(2)
@@ -245,7 +245,7 @@ def add_horse_history_features(df_base: pd.DataFrame, df_horse: pd.DataFrame) ->
     )
 
     # 条件別フォーム（芝/ダ、競馬場、距離帯、馬場状態）
-    # condition-specific rolling mean (window=3)
+    # 条件別の移動平均（window=3）
     cond_map = {
         "race_type": "same_surface",
         "place": "same_place",
@@ -263,11 +263,11 @@ def add_horse_history_features(df_base: pd.DataFrame, df_horse: pd.DataFrame) ->
             )
 
     # 休み明け系（出走間隔、休み明けフラグ、直近出走数）
-    # rest / interval features
+    # 休養・間隔系の特徴量
     h["prev_date"] = h.groupby("horse_id")["date"].shift(1)
-    # days_since_last
+    # 前走からの経過日数
     h["days_since_last"] = (h["date"] - h["prev_date"]).dt.days
-    # runs_last_90d
+    # 直近90日以内の出走数
     h["runs_last_90d"] = _runs_last_n_days(h, 90).astype("Int64")
 
     # 付与に使う列をまとめて結合
@@ -347,7 +347,7 @@ def add_race_hr_stats(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_people_history_features(df: pd.DataFrame) -> pd.DataFrame:
-    # people history features are disabled (jockey/trainer/owner)
+    # 関係者履歴特徴は無効化（騎手/調教師/馬主）
     return df.copy()
 
     base = df.copy()
@@ -373,7 +373,7 @@ def add_people_history_features(df: pd.DataFrame) -> pd.DataFrame:
         agg["runs_cum"] = agg.groupby(col)["runs"].cumsum().shift(1).fillna(0)
 
         # 平滑化で母数の少ないIDの暴れを抑える
-        # Laplace smoothing to stabilize low-sample IDs
+        # ラプラス平滑化で母数の少ないIDの暴れを抑える
         agg[f"{prefix}_win_rate_smooth"] = (agg["wins_cum"] + 1) / (agg["runs_cum"] + 2)
         agg[f"{prefix}_top3_rate_smooth"] = (agg["top3_cum"] + 1) / (agg["runs_cum"] + 2)
         agg[f"{prefix}_runs_total"] = agg["runs_cum"]

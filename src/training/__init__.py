@@ -1,1 +1,1 @@
-# Training entrypoints.
+# 学習系のエントリポイント。
