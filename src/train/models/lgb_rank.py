@@ -106,10 +106,10 @@ def train_rank(
 
         valid_sets = [dva]
         valid_names = ["valid"]
-        callbacks = [lgb.log_evaluation(0)]
+        callbacks = []
         if early_stopping_rounds is not None:
             # ndcg@3 を先頭に置けば、first_metric_only=True で ndcg@3 を監視できる
-            callbacks.insert(0, lgb.early_stopping(int(early_stopping_rounds), first_metric_only=True))
+            callbacks.insert(0, lgb.early_stopping(int(early_stopping_rounds), first_metric_only=True, verbose=False))
 
         model = lgb.train(
             p, dtr,
@@ -124,7 +124,7 @@ def train_rank(
         model = lgb.train(
             p, dtr,
             num_boost_round=int(num_boost_round),
-            callbacks=[lgb.log_evaluation(0)],
+            callbacks=[],
         )
         best_iter = int(num_boost_round)
 

@@ -87,9 +87,9 @@ def train_binary(
             score = top1_pos_rate_fast(preds, y, order, starts, counts, noise=noise)
             return ("top1_pos_rate", score, True)
 
-        callbacks = [lgb.record_evaluation(evals_result), lgb.log_evaluation(0)]
+        callbacks = [lgb.record_evaluation(evals_result)]
         if early_stopping_rounds is not None:
-            callbacks.insert(1, lgb.early_stopping(int(early_stopping_rounds), first_metric_only=True))
+            callbacks.insert(1, lgb.early_stopping(int(early_stopping_rounds), first_metric_only=True, verbose=False))
 
         model = lgb.train(
             p, dtr,
@@ -102,7 +102,7 @@ def train_binary(
         best_iter = int(model.best_iteration)
     else:
         # holdout無し学習（最終学習など）
-        callbacks = [lgb.record_evaluation(evals_result), lgb.log_evaluation(0)]
+        callbacks = [lgb.record_evaluation(evals_result)]
         model = lgb.train(
             p, dtr,
             num_boost_round=int(num_boost_round),

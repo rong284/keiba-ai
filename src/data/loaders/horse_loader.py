@@ -11,7 +11,7 @@ def load_horse_results(glob_pattern: str = "data/rawdf/horse/horse_*.csv") -> pd
 
     dfs = []
     for p in tqdm(paths, desc="horse csv", leave=False):
-        raw = pd.read_csv(p, sep=",")
+        raw = pd.read_csv(p, sep=",", low_memory=False)
         raw.columns = [str(c).strip().lstrip("\ufeff") for c in raw.columns]
         dfs.append(preprocess_horse_results_df(raw))
 
