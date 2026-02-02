@@ -2,7 +2,7 @@
 import pandas as pd
 import re
 import ast
-from src.data.common.mappings import (
+from src.data_collection.common.mappings import (
     WEATHER_MAP, GROUND_MAP, RACE_TYPE_MAP, PLACE_MAP, race_class_mapper
 )
 

@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 import lightgbm as lgb
 
-from src.train.features import make_X, align_categories
-from src.train.metrics import race_equal_weights
-from src.train.metrics_race import prep_group_index, top1_pos_rate_fast
+from src.training.features import make_X, align_categories
+from src.training.metrics import race_equal_weights
+from src.training.metrics_race import prep_group_index, top1_pos_rate_fast
 
 
 def calc_scale_pos_weight(y: np.ndarray) -> float:

@@ -2,7 +2,7 @@
 from pathlib import Path
 import pandas as pd
 from src.utils.progress import tqdm
-from src.data.preprocess.race_info import preprocess_race_info_df
+from src.data_collection.preprocess.race_info import preprocess_race_info_df
 
 def load_race_info(glob_pattern: str = "data/rawdf/race_info/race_info_*.csv") -> pd.DataFrame:
     paths = sorted(Path().glob(glob_pattern))

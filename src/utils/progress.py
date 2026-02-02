@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+from typing import Any
+
 from tqdm.auto import tqdm as _tqdm
 
 
@@ -12,3 +14,10 @@ def tqdm(*args, **kwargs):
     kwargs.setdefault("leave", False)
     kwargs.setdefault("disable", not sys.stderr.isatty())
     return _tqdm(*args, **kwargs)
+
+
+def log(message: str, **kwargs: Any) -> None:
+    """
+    Print without breaking tqdm progress bars.
+    """
+    _tqdm.write(message, **kwargs)

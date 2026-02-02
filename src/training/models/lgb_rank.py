@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import lightgbm as lgb
 
-from src.train.features import make_X, align_categories
-from src.train.metrics import race_equal_weights
+from src.training.features import make_X, align_categories
+from src.training.metrics import race_equal_weights
 
 
 def sort_by_group(df: pd.DataFrame, group_col: str = "race_id") -> pd.DataFrame:

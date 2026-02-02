@@ -29,5 +29,26 @@
     "verbosity": -1
   },
   "calib_fit_end": "2025-03-31",
-  "calib_sel_end": "2025-06-30"
+  "calib_sel_end": "2025-06-30",
+  "win_odds_col": "tansho_odds",
+  "edge_grid": [0.05, 0.1, 0.15, 0.2, 0.3, 0.5],
+  "edge_min_bets": 100,
+  "edge_min_bets_per_fold": 50,
+  "edge_select_metric": "roi_median",
+  "win_max_per_race": 1,
+  "win_min_p": 0.05,
+  "win_min_odds_grid": [null, 10, 15, 20],
+  "win_max_odds_grid": [20, 30, 50],
+  "win_gap_grid": [null, 0.03, 0.05, 0.07],
+  "win_edge_max_grid": [null, 1.0, 1.5, 2.0],
+  "place_prob_grid": [0.05, 0.08, 0.1, 0.12, 0.15, 0.18, 0.2, 0.25, 0.3, 0.35, 0.4],
+  "place_gap_grid": [0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0.12, 0.15, 0.2],
+  "place_min_bets": 100,
+  "place_select_metric": "hit_rate",
+  "place_max_per_race": 1,
+  "calib_valid_ratio": 0.5,
+  "calib_train_ratio": 0.2,
+  "odds_bins": [1, 2, 5, 10, 20, 30, 50, 100, 1000],
+  "p_bins": [0.0, 0.02, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0],
+  "edge_bins": [-1.0, 0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0, "inf"]
 }

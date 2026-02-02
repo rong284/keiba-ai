@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
-from src.train.metrics import clip_prob, prob_metrics, race_equal_weights
+from src.training.metrics import clip_prob, prob_metrics, race_equal_weights
 
 
 @dataclass

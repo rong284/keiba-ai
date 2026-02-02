@@ -1,5 +1,5 @@
 import pandas as pd
-from src.data.features.feature_engineering import _rolling_mean_by_horse
+from src.data_collection.features.feature_engineering import _rolling_mean_by_horse
 
 
 def add_last3_mean_rank(df_base: pd.DataFrame, df_horse: pd.DataFrame) -> pd.DataFrame:

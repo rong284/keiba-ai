@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
-from src.utils.progress import tqdm
+from src.utils.progress import log, tqdm
 
 # 既存ローダ・パイプラインをそのまま使う
-from src.data.loaders.result_loader import load_results
-from src.data.loaders.horse_loader import load_horse_results
-from src.data.loaders.race_info_loader import load_race_info
-from src.data.pipelines.build_train_table import build_train_table
+from src.data_collection.loaders.result_loader import load_results
+from src.data_collection.loaders.horse_loader import load_horse_results
+from src.data_collection.loaders.race_info_loader import load_race_info
+from src.data_collection.pipelines.build_train_table import build_train_table
 
 
 @dataclass(frozen=True)
@@ -63,8 +61,8 @@ def load_train_dataframe(paths: DataPaths) -> pd.DataFrame:
     after = len(df)
     df["rank"] = df["rank"].astype(int)
 
-    print(f"[data] dropped rows: {before-after:,}")
-    print(f"[data] n_races={df['race_id'].nunique():,} n_rows={len(df):,}")
+    log(f"[data] dropped rows: {before-after:,}")
+    log(f"[data] n_races={df['race_id'].nunique():,} n_rows={len(df):,}")
     steps.update(1)
 
     # ---- 目的変数（2値） ----

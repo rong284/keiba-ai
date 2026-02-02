@@ -6,9 +6,9 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from src.train.data import DataPaths, load_train_dataframe
-from src.train.features import build_feature_spec
-from src.train.split import TimeFold, make_time_folds
+from src.training.data import DataPaths, load_train_dataframe
+from src.training.features import build_feature_spec
+from src.training.split import TimeFold, make_time_folds
 
 
 def load_config(path: str) -> Dict:
@@ -38,3 +38,13 @@ def save_optuna_artifacts(out_dir: Path, best: Dict, trials: List[Dict], prefix:
     best_path.write_text(json.dumps(best, ensure_ascii=False, indent=2), encoding="utf-8")
     pd.DataFrame(trials).to_csv(out_dir / f"optuna_trials_{prefix}.csv", index=False, encoding="utf-8")
     return best_path
+
+
+def load_best_params(path: Path, base_params: Dict) -> Dict:
+    if not path.exists():
+        return dict(base_params)
+    best = json.loads(path.read_text(encoding="utf-8"))
+    best = {k: v for k, v in best.items() if not str(k).startswith("_")}
+    merged = dict(base_params)
+    merged.update(best)
+    return merged

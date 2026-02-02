@@ -7,21 +7,22 @@ from typing import Dict
 import pandas as pd
 from src.utils.progress import tqdm
 
-from src.train.models.lgb_rank import sort_by_group
-from src.train.data import DataPaths, load_train_dataframe
-from src.train.split import TimeFold, make_time_folds, make_holdout, make_train_only, clip_test_end
-from src.train.date_plan import resolve_date_plan
-from src.train.reporting import (
+from src.training.models.lgb_rank import sort_by_group
+from src.training.data import DataPaths, load_train_dataframe
+from src.training.split import TimeFold, make_time_folds, make_holdout, make_train_only, clip_test_end
+from src.training.date_plan import resolve_date_plan
+from src.training.reporting import (
     plot_cv_best_iter,
     plot_cv_metrics_rank,
     plot_holdout_rank,
     save_date_plan,
     write_report,
 )
-from src.train.features import build_feature_spec
-from src.train.metrics import mrr_for_winner, ndcg_at_k, hit_at_k
-from src.train.models.lgb_rank import train_rank, predict_rank, make_relevance_from_rank
-from src.train.artifacts import OutputDirs, save_json, save_table_csv, save_lgb_model
+from src.training.tuning_common import load_best_params
+from src.training.features import build_feature_spec
+from src.training.metrics import mrr_for_winner, ndcg_at_k, hit_at_k
+from src.training.models.lgb_rank import train_rank, predict_rank, make_relevance_from_rank
+from src.training.artifacts import OutputDirs, save_json, save_table_csv, save_lgb_model
 
 
 def load_config(path: str) -> Dict:
@@ -55,6 +56,12 @@ def main(
     folds = [TimeFold(*x) for x in cfg["folds"]]
     fold_pairs = make_time_folds(df, folds, date_col="race_date")
 
+    optuna_dir = Path(cfg.get("optuna_dir", out.tab_dir))
+    best_path = optuna_dir / "optuna_best_params_rank.json"
+    lgb_params = load_best_params(best_path, cfg["lgb_params"])
+    if best_path.exists():
+        save_json(out.tab_dir / "lgb_params_rank_resolved.json", lgb_params)
+
     rows = []
     for tr_df, va_df, f in tqdm(fold_pairs, desc="cv folds (rank)", position=0):
         # --- CV loop の中 ---
@@ -69,7 +76,7 @@ def main(
             va_df=va_s,
             feature_cols=spec.feature_cols,
             cat_cols=spec.cat_cols,
-            params=cfg["lgb_params"],
+            params=lgb_params,
             eval_at=list(cfg["eval_at"]),
             seed=int(cfg["random_seed"]),
             num_boost_round=5000,
@@ -126,7 +133,7 @@ def main(
         va_df=None,
         feature_cols=spec.feature_cols,
         cat_cols=spec.cat_cols,
-        params=cfg["lgb_params"],
+        params=lgb_params,
         eval_at=list(cfg["eval_at"]),
         seed=int(cfg["random_seed"]),
         num_boost_round=best_iter,

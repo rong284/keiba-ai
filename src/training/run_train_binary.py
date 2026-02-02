@@ -7,19 +7,20 @@ from typing import Dict
 import pandas as pd
 from src.utils.progress import tqdm
 
-from src.train.data import DataPaths, load_train_dataframe
-from src.train.split import TimeFold, make_time_folds, make_holdout, make_train_only, clip_test_end
-from src.train.date_plan import resolve_date_plan
-from src.train.reporting import (
+from src.training.data import DataPaths, load_train_dataframe
+from src.training.split import TimeFold, make_time_folds, make_holdout, make_train_only, clip_test_end
+from src.training.date_plan import resolve_date_plan
+from src.training.reporting import (
     plot_cv_best_iter,
     plot_holdout_binary,
     save_date_plan,
     write_report,
 )
-from src.train.features import build_feature_spec
-from src.train.metrics import hit_at_k, top1_pos_rate
-from src.train.models.lgb_binary import train_binary, predict_binary
-from src.train.artifacts import OutputDirs, save_json, save_table_csv, save_lgb_model
+from src.training.tuning_common import load_best_params
+from src.training.features import build_feature_spec
+from src.training.metrics import hit_at_k, top1_pos_rate
+from src.training.models.lgb_binary import train_binary, predict_binary
+from src.training.artifacts import OutputDirs, save_json, save_table_csv, save_lgb_model
 
 
 TARGET_MAP = {
@@ -62,8 +63,13 @@ def main(
 
     rows = []
 
+    optuna_dir = Path(cfg.get("optuna_dir", out.tab_dir))
     for target_name in tqdm(cfg["target_list"], desc="targets (cv)", position=0):
         y_col = TARGET_MAP[target_name]
+        best_path = optuna_dir / f"optuna_best_params_{target_name}.json"
+        lgb_params = load_best_params(best_path, cfg["lgb_params"])
+        if best_path.exists():
+            save_json(out.tab_dir / f"lgb_params_{target_name}_resolved.json", lgb_params)
         for tr_df, va_df, f in tqdm(fold_pairs, desc=f"cv folds ({target_name})", position=1, leave=False):
             res = train_binary(
                 tr_df=tr_df,
@@ -71,7 +77,7 @@ def main(
                 y_col=y_col,
                 feature_cols=spec.feature_cols,
                 cat_cols=spec.cat_cols,
-                params=cfg["lgb_params"],
+                params=lgb_params,
                 seed=int(cfg["random_seed"]),
             )
             pred = predict_binary(res.model, tr_df, va_df, spec.feature_cols, spec.cat_cols)
@@ -139,7 +145,7 @@ def main(
             y_col=y_col,
             feature_cols=spec.feature_cols,
             cat_cols=spec.cat_cols,
-            params=cfg["lgb_params"],
+            params=lgb_params,
             seed=int(cfg["random_seed"]),
             num_boost_round=final_rounds,   # ★ここが重要
             early_stopping_rounds=None,

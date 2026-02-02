@@ -2,7 +2,7 @@
 from pathlib import Path
 import pandas as pd
 from src.utils.progress import tqdm
-from src.data.preprocess.horse import preprocess_horse_results_df
+from src.data_collection.preprocess.horse import preprocess_horse_results_df
 
 def load_horse_results(glob_pattern: str = "data/rawdf/horse/horse_*.csv") -> pd.DataFrame:
     paths = sorted(Path().glob(glob_pattern))
