@@ -23,6 +23,7 @@ from src.training.features import build_feature_spec
 from src.training.metrics import mrr_for_winner, ndcg_at_k, hit_at_k
 from src.training.models.lgb_rank import train_rank, predict_rank, make_relevance_from_rank
 from src.training.artifacts import OutputDirs, save_json, save_table_csv, save_lgb_model
+from src.training.feature_analysis import build_feature_summary, save_feature_importance
 
 
 def load_config(path: str) -> Dict:
@@ -50,6 +51,8 @@ def main(
         "cat_cols": spec.cat_cols,
         "dropped_cols": spec.dropped_cols,
     })
+    feature_summary = build_feature_summary(df, spec.feature_cols, spec.cat_cols)
+    save_table_csv(out.tab_dir / "feature_summary_rank.csv", feature_summary)
 
     # ---- CV（2024まで） ----
     # 2025は一切見ない。best_iter は CV のみから決める。
@@ -140,6 +143,7 @@ def main(
         early_stopping_rounds=None,
     )
     save_lgb_model(out.model_dir / "lgb_rank_lambdarank.txt", res.model)
+    save_feature_importance(out.tab_dir, "rank", res.model, feature_summary=feature_summary)
 
     hold = None
     if test2025 is not None and len(test2025) > 0:

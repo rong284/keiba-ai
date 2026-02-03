@@ -22,6 +22,7 @@ from src.training.metrics import hit_at_k, top1_pos_rate
 from src.training.models.lgb_binary import train_binary, predict_binary
 from src.training.artifacts import OutputDirs, save_json, save_table_csv, save_lgb_model
 from src.training.odds import odds_base_margin
+from src.training.feature_analysis import build_feature_summary, save_feature_importance
 
 
 TARGET_MAP = {
@@ -62,6 +63,8 @@ def main(
         "cat_cols": spec.cat_cols,
         "dropped_cols": spec.dropped_cols,
     })
+    feature_summary = build_feature_summary(df, spec.feature_cols, spec.cat_cols)
+    save_table_csv(out.tab_dir / "feature_summary.csv", feature_summary)
 
     # ---- CV（2024まで） ----
     folds = [TimeFold(*x) for x in cfg["folds"]]
@@ -167,6 +170,7 @@ def main(
         )
         model_path = out.model_dir / f"lgb_binary_{target_name}.txt"
         save_lgb_model(model_path, res.model)
+        save_feature_importance(out.tab_dir, target_name, res.model, feature_summary=feature_summary)
 
         if eval_2025 is not None:
             base_ev = odds_base_margin(eval_2025, odds_col=odds_col) if mode == "residual" else None
