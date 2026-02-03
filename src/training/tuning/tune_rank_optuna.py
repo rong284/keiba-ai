@@ -68,7 +68,7 @@ def objective_factory(df, fold_pairs, spec, cfg):
 
 def main(
     config_path: str = "src/configs/train_rank.json",
-    out_dir: str = "outputs/03_train/rank/tables",
+    out_dir: str = "outputs/train/rank/tables",
     n_trials: int = 40,
 ):
     cfg = load_config(config_path)
@@ -107,7 +107,7 @@ def main(
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="src/configs/train_rank.json")
-    ap.add_argument("--out_dir", default="outputs/03_train/rank/tables")
+    ap.add_argument("--out_dir", default="outputs/train/rank/tables")
     ap.add_argument("--n_trials", type=int, default=40)
     args = ap.parse_args()
 

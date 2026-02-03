@@ -31,7 +31,7 @@ def load_config(path: str) -> Dict:
 
 def main(
     config_path: str = "src/configs/train_rank.json",
-    out_dir: str = "outputs/03_train/rank",
+    out_dir: str = "outputs/train/rank",
 ):
     cfg = load_config(config_path)
     out = OutputDirs.create(Path(out_dir))
@@ -184,7 +184,7 @@ def main(
         ]
     write_report(out.out_dir / "report_rank.md", report_lines)
 
-    print("[done] outputs/03_train に保存しました")
+    print("[done] outputs/train に保存しました")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import lightgbm as lgb
 from src.training.features import make_X, align_categories
 from src.training.metrics import race_equal_weights
 from src.training.metrics_race import prep_group_index, top1_pos_rate_fast
+from src.training.odds import sigmoid
 
 
 def calc_scale_pos_weight(y: np.ndarray) -> float:
@@ -41,6 +42,8 @@ def train_binary(
     seed: int = 42,
     num_boost_round: int = 5000,
     early_stopping_rounds: Optional[int] = 200,
+    base_margin_tr: Optional[np.ndarray] = None,
+    base_margin_va: Optional[np.ndarray] = None,
 ) -> BinaryTrainResult:
     """
     LightGBMのtrain APIで2値分類を学習する。
@@ -63,7 +66,14 @@ def train_binary(
         "scale_pos_weight": calc_scale_pos_weight(y_tr),
     })
 
-    dtr = lgb.Dataset(X_tr, label=y_tr, weight=w_tr, categorical_feature=cat_cols, free_raw_data=False)
+    dtr = lgb.Dataset(
+        X_tr,
+        label=y_tr,
+        weight=w_tr,
+        categorical_feature=cat_cols,
+        free_raw_data=False,
+        init_score=base_margin_tr,
+    )
 
     valid_sets = []
     valid_names = []
@@ -75,7 +85,14 @@ def train_binary(
         X_va = make_X(va_df, feature_cols, cat_cols)
         X_va = align_categories(X_tr, X_va, cat_cols)
         w_va = race_equal_weights(va_df, "race_id")
-        dva = lgb.Dataset(X_va, label=y_va, weight=w_va, categorical_feature=cat_cols, free_raw_data=False)
+        dva = lgb.Dataset(
+            X_va,
+            label=y_va,
+            weight=w_va,
+            categorical_feature=cat_cols,
+            free_raw_data=False,
+            init_score=base_margin_va,
+        )
 
         valid_sets = [dva]
         valid_names = ["valid"]
@@ -124,6 +141,7 @@ def predict_binary(
     target_df: pd.DataFrame,
     feature_cols: List[str],
     cat_cols: List[str],
+    base_margin: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     学習側カテゴリに合わせて推論する（align_categories が重要）
@@ -131,4 +149,7 @@ def predict_binary(
     X_tr = make_X(train_ref_df, feature_cols, cat_cols)
     X_te = make_X(target_df, feature_cols, cat_cols)
     X_te = align_categories(X_tr, X_te, cat_cols)
-    return model.predict(X_te, num_iteration=model.best_iteration)
+    if base_margin is None:
+        return model.predict(X_te, num_iteration=model.best_iteration)
+    raw = model.predict(X_te, num_iteration=model.best_iteration, raw_score=True)
+    return sigmoid(raw + np.asarray(base_margin, dtype=float))

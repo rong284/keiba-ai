@@ -6,6 +6,8 @@
 - 生のレース/馬/結果データからクリーンな学習テーブルを作成
 - 二値（勝ち/複勝）・順位（LambdaRank）モデルを時系列CVで学習
 - ホールドアウト年で評価し、払戻表を使った回収率シミュレーションを実行
+- モデル品質（Layer A）と戦略品質（Layer B）を分離して評価
+- 市場（odds）をベースに残差学習して確率品質を改善
 
 ---
 
@@ -76,17 +78,17 @@ python src/data_collection/scraping/parse_return_html_to_csv.py --year 2025
 ```bash
 python -m src.training.tuning.tune_binary_optuna \
   --config src/configs/train_binary.json \
-  --out_dir outputs/03_train/binary/tables \
+  --out_dir outputs/train/binary/tables \
   --target win --n_trials 50
 
 python -m src.training.tuning.tune_binary_optuna \
   --config src/configs/train_binary.json \
-  --out_dir outputs/03_train/binary/tables \
+  --out_dir outputs/train/binary/tables \
   --target place --n_trials 50
 
 python -m src.training.tuning.tune_rank_optuna \
   --config src/configs/train_rank.json \
-  --out_dir outputs/03_train/rank/tables \
+  --out_dir outputs/train/rank/tables \
   --n_trials 50
 ```
 
@@ -98,14 +100,14 @@ python -m src.training.tuning.tune_rank_optuna \
 ```bash
 python -m src.training.run_train_binary \
   --config_path src/configs/train_binary.json \
-  --out_dir outputs/03_train/binary
+  --out_dir outputs/train/binary
 ```
 
 ### 5-2. 順位（LambdaRank）学習
 ```bash
 python -m src.training.run_train_rank \
   --config_path src/configs/train_rank.json \
-  --out_dir outputs/03_train/rank
+  --out_dir outputs/train/rank
 ```
 
 ---
@@ -115,7 +117,7 @@ python -m src.training.run_train_rank \
 ```bash
 python -m src.evaluation.backtest_rules \
   --config src/configs/train_binary.json \
-  --out_dir outputs/04_backtest_rules \
+  --out_dir outputs/backtest \
   --return_path data/rawdf/return/return_2025.csv
 ```
 
@@ -123,7 +125,7 @@ python -m src.evaluation.backtest_rules \
 ```bash
 python -m src.evaluation.simulate_returns \
   --return_path data/rawdf/return/return_2025.csv \
-  --out_dir outputs/04_returns/2025
+  --out_dir outputs/returns/2025
 ```
 ---
 
@@ -149,11 +151,19 @@ python -m src.evaluation.simulate_returns \
 
 ## 8. 出力先（主な成果物）
 
-- `outputs/03_train/*/tables` : CV・ホールドアウト・予測テーブル
-- `outputs/03_train/*/models` : LightGBMモデル
-- `outputs/03_train/*/figures`: 学習・評価図
-- `outputs/04_backtest_rules` : 回収率シミュレーション結果
-- `outputs/04_returns/*`      : 予測CSVベースの簡易回収率
+- `outputs/train/*/tables` : CV・ホールドアウト・予測テーブル
+- `outputs/train/*/models` : LightGBMモデル
+- `outputs/train/*/figures`: 学習・評価図
+- `outputs/backtest` : 回収率シミュレーション結果
+- `outputs/returns/*`      : 予測CSVベースの簡易回収率
+
+主要ファイル:
+- `outputs/train/binary/tables/model_manifest.json` : 学習モード・特徴量・モデルパスの要約
+- `outputs/train/binary/tables/optuna_manifest_*.json` : チューニングの要約
+- `outputs/backtest/tables/scoreboard_model.csv` : Layer A（モデル品質）
+- `outputs/backtest/tables/scoreboard_strategy.csv` : Layer B（戦略品質）
+- `outputs/backtest/summary.md` : 一撃サマリー
+- `outputs/backtest/summary.json` : サマリー（機械可読）
 
 ---
 
@@ -180,12 +190,45 @@ python -m src.evaluation.simulate_returns \
 実際に使われた列は学習出力の `feature_spec.json` に保存されます。
 
 ```
-outputs/03_train/*/tables/feature_spec.json
+outputs/train/*/tables/feature_spec.json
 ```
 
 注意:
 - 実際の `feature_cols` は入力データにより決まり、存在しない列は自動スキップされます。
 - `use_market=false` の場合、市場特徴量（オッズ/人気）は除外されます。
+
+---
+
+## 12. 残差学習（市場ベース + 上積み）
+
+確率品質を上げるために、odds をベースにした残差学習を使います。
+
+- `p_odds_raw = 1 / odds`
+- レース内で正規化して `p_odds`
+- `logit(p_odds)` を base_margin として学習
+- 予測は `sigmoid(logit(p_odds) + Δ_hat)`
+
+設定例（`src/configs/train_binary.json`）:
+```json
+  "mode": "residual",
+  "odds_col": "tansho_odds"
+```
+
+Layer A（モデル品質）は baseline_odds と比較して logloss/Brier が勝っているかを必ず確認します。
+
+---
+
+## 13. Layer A / Layer B の使い分け
+
+Layer A（モデル品質）:
+- win/place: logloss, Brier, calibration
+- rank: hit@k, MRR, nDCG
+- baseline（odds/popularity）との比較が必須
+
+Layer B（戦略品質）:
+- ルール固定（topK/gap/min-max odds/edge閾値/1レース最大点数）
+- ROI / profit / DD
+- ルール探索は roi_min / mean-std 寄りで過学習を抑える
 
 ### 基本列（存在する場合）
 - `race_date`, `place`, `race_type`, `around`, `course_len`, `dist_bin`, `weather`,

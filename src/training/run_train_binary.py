@@ -21,6 +21,7 @@ from src.training.features import build_feature_spec
 from src.training.metrics import hit_at_k, top1_pos_rate
 from src.training.models.lgb_binary import train_binary, predict_binary
 from src.training.artifacts import OutputDirs, save_json, save_table_csv, save_lgb_model
+from src.training.odds import odds_base_margin
 
 
 TARGET_MAP = {
@@ -35,9 +36,11 @@ def load_config(path: str) -> Dict:
 
 def main(
     config_path: str = "src/configs/train_binary.json",
-    out_dir: str = "outputs/03_train/binary",
+    out_dir: str = "outputs/train/binary",
 ):
     cfg = load_config(config_path)
+    mode = cfg.get("mode", "standard")
+    odds_col = cfg.get("odds_col", cfg.get("win_odds_col", "tansho_odds"))
     out = OutputDirs.create(Path(out_dir))
     plan = resolve_date_plan(cfg)
     save_date_plan(out.tab_dir, plan.as_dict())
@@ -48,6 +51,9 @@ def main(
         horse_glob="data/rawdf/horse/*.csv",
         race_info_glob="data/rawdf/race_info/*.csv",
     ))
+
+    if mode == "residual" and odds_col not in df.columns:
+        raise ValueError(f"odds_col not found for residual mode: {odds_col}")
 
     # ---- 特徴量 ----
     spec = build_feature_spec(df, use_market=bool(cfg["use_market"]))
@@ -64,6 +70,8 @@ def main(
     rows = []
 
     optuna_dir = Path(cfg.get("optuna_dir", out.tab_dir))
+    manifest_targets: Dict[str, Dict] = {}
+
     for target_name in tqdm(cfg["target_list"], desc="targets (cv)", position=0):
         y_col = TARGET_MAP[target_name]
         best_path = optuna_dir / f"optuna_best_params_{target_name}.json"
@@ -71,6 +79,8 @@ def main(
         if best_path.exists():
             save_json(out.tab_dir / f"lgb_params_{target_name}_resolved.json", lgb_params)
         for tr_df, va_df, f in tqdm(fold_pairs, desc=f"cv folds ({target_name})", position=1, leave=False):
+            base_tr = odds_base_margin(tr_df, odds_col=odds_col) if mode == "residual" else None
+            base_va = odds_base_margin(va_df, odds_col=odds_col) if mode == "residual" else None
             res = train_binary(
                 tr_df=tr_df,
                 va_df=va_df,
@@ -79,8 +89,10 @@ def main(
                 cat_cols=spec.cat_cols,
                 params=lgb_params,
                 seed=int(cfg["random_seed"]),
+                base_margin_tr=base_tr,
+                base_margin_va=base_va,
             )
-            pred = predict_binary(res.model, tr_df, va_df, spec.feature_cols, spec.cat_cols)
+            pred = predict_binary(res.model, tr_df, va_df, spec.feature_cols, spec.cat_cols, base_margin=base_va)
             y_va = va_df[y_col].values.astype(int)
 
             row = {
@@ -139,6 +151,7 @@ def main(
         # ★最終学習：2024までのみ、木の本数はCV best_iterで固定（2025は絶対見ない）
         final_rounds = int(best_iter_map[target_name])
 
+        base_train = odds_base_margin(train_A, odds_col=odds_col) if mode == "residual" else None
         res = train_binary(
             tr_df=train_A,
             va_df=None,  # 2025は使わない（評価の信頼性）
@@ -149,11 +162,15 @@ def main(
             seed=int(cfg["random_seed"]),
             num_boost_round=final_rounds,   # ★ここが重要
             early_stopping_rounds=None,
+            base_margin_tr=base_train,
+            base_margin_va=None,
         )
-        save_lgb_model(out.model_dir / f"lgb_binary_{target_name}.txt", res.model)
+        model_path = out.model_dir / f"lgb_binary_{target_name}.txt"
+        save_lgb_model(model_path, res.model)
 
         if eval_2025 is not None:
-            p_ev = predict_binary(res.model, train_A, eval_2025, spec.feature_cols, spec.cat_cols)
+            base_ev = odds_base_margin(eval_2025, odds_col=odds_col) if mode == "residual" else None
+            p_ev = predict_binary(res.model, train_A, eval_2025, spec.feature_cols, spec.cat_cols, base_margin=base_ev)
             y_ev = eval_2025[y_col].values.astype(int)
 
             hold_row = {
@@ -173,10 +190,28 @@ def main(
             pred_out["p_raw"] = p_ev
             save_table_csv(out.tab_dir / f"preds_{target_name}_2025_eval.csv", pred_out)
 
+        manifest_targets[target_name] = {
+            "model_path": str(model_path),
+            "params_path": str(out.tab_dir / f"lgb_params_{target_name}_resolved.json"),
+            "optuna_best_params_path": str(optuna_dir / f"optuna_best_params_{target_name}.json"),
+        }
+
     hold_df = pd.DataFrame(hold_rows) if hold_rows else pd.DataFrame()
     if not hold_df.empty:
         save_table_csv(out.tab_dir / "holdout_binary_2025.csv", hold_df)
         plot_holdout_binary(hold_df, out.fig_dir / "holdout_binary_2025.png")
+
+    manifest = {
+        "mode": mode,
+        "odds_col": odds_col,
+        "use_market": bool(cfg.get("use_market", False)),
+        "config_path": config_path,
+        "out_dir": out_dir,
+        "feature_spec_path": str(out.tab_dir / "feature_spec.json"),
+        "best_iter_path": str(out.tab_dir / "best_iter_from_cv.json"),
+        "targets": manifest_targets,
+    }
+    save_json(out.tab_dir / "model_manifest.json", manifest)
 
     plot_cv_best_iter(cv_df, out.fig_dir / "cv_best_iter_binary.png", "CV best_iter (binary)")
 
@@ -198,7 +233,7 @@ def main(
         ]
     write_report(out.out_dir / "report_binary.md", report_lines)
 
-    print("[done] outputs/03_train に保存しました")
+    print("[done] outputs/train に保存しました")
 
 
 if __name__ == "__main__":

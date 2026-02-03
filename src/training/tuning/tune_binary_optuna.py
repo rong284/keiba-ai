@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 import argparse
+import json
 from typing import Dict
 
 import numpy as np
 import optuna
 
 from src.training.models.lgb_binary import train_binary, predict_binary
+from src.training.odds import odds_base_margin
 from src.training.metrics import hit_at_k
 from src.training.tuning_common import (
     build_spec,
@@ -24,6 +26,8 @@ def objective_factory(df, fold_pairs, spec, cfg, target_name: str):
     y_col = TARGET_MAP[target_name]
     seed = int(cfg["random_seed"])
     base = dict(cfg["lgb_params"])
+    mode = cfg.get("mode", "standard")
+    odds_col = cfg.get("odds_col", cfg.get("win_odds_col", "tansho_odds"))
 
     def objective(trial: optuna.Trial) -> float:
         params = dict(base)
@@ -42,6 +46,8 @@ def objective_factory(df, fold_pairs, spec, cfg, target_name: str):
 
         scores = []
         for tr_df, va_df, _fold in fold_pairs:
+            base_tr = odds_base_margin(tr_df, odds_col=odds_col) if mode == "residual" else None
+            base_va = odds_base_margin(va_df, odds_col=odds_col) if mode == "residual" else None
             res = train_binary(
                 tr_df=tr_df,
                 va_df=va_df,  # CVなのでvalidあり
@@ -52,8 +58,10 @@ def objective_factory(df, fold_pairs, spec, cfg, target_name: str):
                 seed=seed,
                 num_boost_round=5000,
                 early_stopping_rounds=200,
+                base_margin_tr=base_tr,
+                base_margin_va=base_va,
             )
-            pred = predict_binary(res.model, tr_df, va_df, spec.feature_cols, spec.cat_cols)
+            pred = predict_binary(res.model, tr_df, va_df, spec.feature_cols, spec.cat_cols, base_margin=base_va)
             y_va = va_df[y_col].values.astype(int)
 
             # 目的：レース内Top1命中率を最大化
@@ -67,7 +75,7 @@ def objective_factory(df, fold_pairs, spec, cfg, target_name: str):
 
 def main(
     config_path: str = "src/configs/train_binary.json",
-    out_dir: str = "outputs/03_train/binary/tables",
+    out_dir: str = "outputs/train/binary/tables",
     target: str = "win",
     n_trials: int = 40,
 ):
@@ -75,6 +83,10 @@ def main(
     out_dir = Path(out_dir)
 
     df = load_dataframe()
+    mode = cfg.get("mode", "standard")
+    odds_col = cfg.get("odds_col", cfg.get("win_odds_col", "tansho_odds"))
+    if mode == "residual" and odds_col not in df.columns:
+        raise ValueError(f"odds_col not found for residual mode: {odds_col}")
     spec = build_spec(df, cfg)
     fold_pairs = make_fold_pairs(df, cfg)
 
@@ -100,6 +112,18 @@ def main(
         row["state"] = str(t.state)
         trials.append(row)
     out_path = save_optuna_artifacts(out_dir, best, trials, prefix=target)
+    (out_dir / f"optuna_manifest_{target}.json").write_text(
+        json.dumps({
+            "config_path": config_path,
+            "out_dir": str(out_dir),
+            "target": target,
+            "mode": mode,
+            "odds_col": odds_col,
+            "best_params_path": str(out_path),
+            "trials_path": str(out_dir / f"optuna_trials_{target}.csv"),
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     print("[best_value mean(hit@1)]", study.best_value)
     print("[saved]", out_path)
@@ -108,7 +132,7 @@ def main(
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="src/configs/train_binary.json")
-    ap.add_argument("--out_dir", default="outputs/03_train/binary/tables")
+    ap.add_argument("--out_dir", default="outputs/train/binary/tables")
     ap.add_argument("--target", default="win", choices=["win", "place"])
     ap.add_argument("--n_trials", type=int, default=40)
     args = ap.parse_args()
