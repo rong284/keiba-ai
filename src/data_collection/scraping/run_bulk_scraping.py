@@ -24,6 +24,7 @@ def main() -> None:
     ap.add_argument("--peds-year-end", type=int, default=2025)
     ap.add_argument("--peds-from-gcs", action="store_true", default=False)
     ap.add_argument("--gcs-horse-prefix-base", default="gs://keiba-ai-data-1988/keiba-ai/data/html/horse")
+    ap.add_argument("--gcs-peds-prefix", default="gs://keiba-ai-data-1988/keiba-ai/data/html/peds/")
     ap.add_argument("--sync-gcs", action="store_true", default=False)
     ap.add_argument("--race", action="store_true", default=True)
     ap.add_argument("--no-race", dest="race", action="store_false")
@@ -36,6 +37,7 @@ def main() -> None:
     ap.add_argument("--concurrency", type=int, default=1)
     ap.add_argument("--sleep-min", type=float, default=2.5)
     ap.add_argument("--sleep-max", type=float, default=3.5)
+    ap.add_argument("--restart-every", type=int, default=0)
     ap.add_argument("--results-glob", default=None)
     ap.add_argument("--headless", action="store_true", default=True)
     ap.add_argument("--headed", dest="headless", action="store_false")
@@ -88,6 +90,10 @@ def main() -> None:
                     "python",
                     str(root / "src/data_collection/scraping/scrape_horse_result.py"),
                     *results_arg,
+                    "--horse-ids-gcs-prefix",
+                    f"{args.gcs_horse_prefix_base}/",
+                    "--gcs-prefix",
+                    f"{args.gcs_horse_prefix_base}/",
                     "--out-dir",
                     str(out_dir),
                     "--concurrency",
@@ -96,6 +102,8 @@ def main() -> None:
                     str(args.sleep_min),
                     "--sleep-max",
                     str(args.sleep_max),
+                    "--restart-every",
+                    str(args.restart_every),
                     "--headless" if args.headless else "--headed",
                 ]
             )
@@ -109,6 +117,8 @@ def main() -> None:
                     str(root / "src/data_collection/scraping/scrape_horse_peds.py"),
                     "--horse-ids-gcs-prefix",
                     f"{args.gcs_horse_prefix_base}/",
+                    "--gcs-prefix",
+                    args.gcs_peds_prefix,
                     "--out-dir",
                     str(out_dir),
                     "--concurrency",
@@ -117,6 +127,8 @@ def main() -> None:
                     str(args.sleep_min),
                     "--sleep-max",
                     str(args.sleep_max),
+                    "--restart-every",
+                    str(args.restart_every),
                     "--headless" if args.headless else "--headed",
                 ]
             )

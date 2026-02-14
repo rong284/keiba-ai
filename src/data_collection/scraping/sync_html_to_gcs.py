@@ -21,7 +21,20 @@ def normalize_gcs_prefix(prefix: str) -> str:
 
 
 def list_remote_basenames(gcs_prefix: str) -> set[str]:
-    out = run_cmd(["gsutil", "ls", gcs_prefix])
+    result = subprocess.run(
+        ["gsutil", "ls", gcs_prefix],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        msg = (result.stderr or result.stdout).strip()
+        # 初回同期でprefix配下にまだオブジェクトがない場合は空として扱う
+        if "One or more URLs matched no objects." in msg:
+            return set()
+        raise RuntimeError(f"command failed: gsutil ls {gcs_prefix}\n{msg}")
+
+    out = result.stdout
     names: set[str] = set()
     for line in out.splitlines():
         line = line.strip()

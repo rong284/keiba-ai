@@ -85,6 +85,8 @@ def load_existing_ids_gcs(gcs_prefix: str) -> set[str]:
     )
     if result.returncode != 0:
         msg = result.stderr.strip() or result.stdout.strip()
+        if "One or more URLs matched no objects." in msg:
+            return set()
         raise RuntimeError(f"gsutil ls failed: {msg}")
 
     ids: set[str] = set()
@@ -101,6 +103,39 @@ def load_existing_ids_gcs(gcs_prefix: str) -> set[str]:
             ids.add(name[:-4])
     return ids
 
+
+def load_horse_ids_from_gcs(gcs_prefix: str, limit: int | None) -> list[str]:
+    if not gcs_prefix.endswith("/"):
+        gcs_prefix = gcs_prefix + "/"
+    result = subprocess.run(
+        ["gsutil", "ls", gcs_prefix],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        msg = result.stderr.strip() or result.stdout.strip()
+        if "One or more URLs matched no objects." in msg:
+            return []
+        raise RuntimeError(f"gsutil ls failed: {msg}")
+
+    ids: set[str] = set()
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line or line.endswith("/"):
+            continue
+        name = line.split("/")[-1]
+        if name.endswith(".html.gz"):
+            ids.add(name[:-8])
+        elif name.endswith(".html"):
+            ids.add(name[:-5])
+        elif name.endswith(".bin"):
+            ids.add(name[:-4])
+    result_ids = sorted(ids)
+    if limit is not None:
+        return result_ids[:limit]
+    return result_ids
+
 async def fetch_html(page: Page, url: str, timeout_ms: int = 45_000) -> str:
     await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
     await page.wait_for_selector("body", timeout=30_000)
@@ -115,17 +150,25 @@ async def worker(
     sleep_min: float,
     sleep_max: float,
     headless: bool,
-    failed: list[str],
-    saved: list[str],
+    progress: dict,
+    saved_log: Path,
+    failed_log: Path,
+    restart_every: int,
 ):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
-        context = await browser.new_context(
-            user_agent=random.choice(USER_AGENTS),
-            locale="ja-JP",
-            timezone_id="Asia/Tokyo",
-        )
-        page = await context.new_page()
+
+        async def new_page():
+            ctx = await browser.new_context(
+                user_agent=random.choice(USER_AGENTS),
+                locale="ja-JP",
+                timezone_id="Asia/Tokyo",
+            )
+            page = await ctx.new_page()
+            return ctx, page
+
+        context, page = await new_page()
+        processed = 0
 
         while True:
             horse_id = await queue.get()
@@ -143,7 +186,8 @@ async def worker(
                     try:
                         html = await fetch_html(page, url)
                         save_gz(path, html)
-                        saved.append(horse_id)
+                        progress["saved"] += 1
+                        saved_log.open("a", encoding="utf-8").write(f"{horse_id}\n")
                         ok = True
                         break
                     except Exception as e:
@@ -153,12 +197,17 @@ async def worker(
                         await asyncio.sleep(backoff)
 
                 if not ok:
-                    failed.append(horse_id)
+                    progress["failed"] += 1
+                    failed_log.open("a", encoding="utf-8").write(f"{horse_id}\n")
 
                 # 礼儀のアクセス間隔（成功/失敗に関わらず）
                 await asyncio.sleep(random.uniform(sleep_min, sleep_max))
 
             queue.task_done()
+            processed += 1
+            if restart_every > 0 and processed % restart_every == 0:
+                await context.close()
+                context, page = await new_page()
 
         await context.close()
         await browser.close()
@@ -173,6 +222,7 @@ async def run(
     sleep_max: float,
     headless: bool,
     log_dir: Path,
+    restart_every: int,
 ):
     out_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -195,8 +245,11 @@ async def run(
         await q.put(None)
 
     sem = asyncio.Semaphore(concurrency)  # 実質同時数
-    failed: list[str] = []
-    saved: list[str] = []
+    progress = {"saved": 0, "failed": 0}
+    saved_log = log_dir / "scrape_saved.txt"
+    failed_log = log_dir / "scrape_failed.txt"
+    saved_log.write_text("", encoding="utf-8")
+    failed_log.write_text("", encoding="utf-8")
 
     tasks = [
         asyncio.create_task(
@@ -209,8 +262,10 @@ async def run(
                 sleep_min=sleep_min,
                 sleep_max=sleep_max,
                 headless=headless,
-                failed=failed,
-                saved=saved,
+                progress=progress,
+                saved_log=saved_log,
+                failed_log=failed_log,
+                restart_every=restart_every,
             )
         )
         for i in range(concurrency)
@@ -221,7 +276,7 @@ async def run(
         done_prev = 0
         while any(not t.done() for t in tasks):
             await asyncio.sleep(1.0)
-            done_now = len(saved) + len(failed)
+            done_now = progress["saved"] + progress["failed"]
             if done_now > done_prev:
                 pbar.update(done_now - done_prev)
                 done_prev = done_now
@@ -231,9 +286,7 @@ async def run(
     # ログ出力
     if skip:
         print(f"skipped(existing)={skipped}")
-    (log_dir / "scrape_saved.txt").write_text("\n".join(saved), encoding="utf-8")
-    (log_dir / "scrape_failed.txt").write_text("\n".join(failed), encoding="utf-8")
-    print(f"saved={len(saved)} failed={len(failed)} (logs: {log_dir})")
+    print(f"saved={progress['saved']} failed={progress['failed']} (logs: {log_dir})")
 
 def main():
     root = project_root()
@@ -247,11 +300,13 @@ def main():
     ap.add_argument("--skip", action="store_true", default=True)
     ap.add_argument("--no-skip", dest="skip", action="store_false")
     ap.add_argument("--gcs-prefix", default=None)
+    ap.add_argument("--horse-ids-gcs-prefix", default=None)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--concurrency", type=int, default=1)  # まずは1推奨
     ap.add_argument("--max-retry", type=int, default=3)
     ap.add_argument("--sleep-min", type=float, default=2.5)
     ap.add_argument("--sleep-max", type=float, default=3.5)
+    ap.add_argument("--restart-every", type=int, default=0)  # 0=無効
     ap.add_argument("--headless", action="store_true", default=True)
     ap.add_argument("--headed", dest="headless", action="store_false")
     args = ap.parse_args()
@@ -260,6 +315,9 @@ def main():
     if not files:
         raise FileNotFoundError(f"No result csv files found. path={args.results_path} glob={args.results_glob}")
     horse_ids = load_horse_ids(files, sep=args.sep, limit=args.limit)
+    if args.horse_ids_gcs_prefix:
+        gcs_ids = load_horse_ids_from_gcs(args.horse_ids_gcs_prefix, limit=None)
+        horse_ids = sorted(set(horse_ids).union(set(gcs_ids)))
 
     gcs_existing: set[str] = set()
     if args.skip and args.gcs_prefix:
@@ -279,6 +337,7 @@ def main():
             sleep_max=args.sleep_max,
             headless=args.headless,
             log_dir=Path(args.log_dir),
+            restart_every=args.restart_every,
         )
     )
 

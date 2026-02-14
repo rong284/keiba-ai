@@ -125,7 +125,7 @@ async def collect_race_ids_for_date(page: Page, kaisai_date: str, sleep_min: flo
 async def scrape_race_html_worker(
     name: str,
     queue: asyncio.Queue,
-    page: Page,
+    browser,
     out_dir: Path,
     skip: bool,
     max_retry: int,
@@ -133,7 +133,22 @@ async def scrape_race_html_worker(
     sleep_max: float,
     saved: list[str],
     failed: list[str],
+    restart_every: int,
+    saved_log: Path,
+    failed_log: Path,
 ):
+    async def new_page():
+        ctx = await browser.new_context(
+            user_agent=random.choice(USER_AGENTS),
+            locale="ja-JP",
+            timezone_id="Asia/Tokyo",
+        )
+        page = await ctx.new_page()
+        return ctx, page
+
+    ctx, page = await new_page()
+    processed = 0
+
     while True:
         race_id = await queue.get()
         if race_id is None:
@@ -143,6 +158,10 @@ async def scrape_race_html_worker(
         path = out_path(out_dir, race_id)
         if skip and path.is_file():
             queue.task_done()
+            processed += 1
+            if restart_every > 0 and processed % restart_every == 0:
+                await ctx.close()
+                ctx, page = await new_page()
             continue
 
         url = BASE_RACE_DB_URL.format(race_id=race_id)
@@ -150,16 +169,33 @@ async def scrape_race_html_worker(
 
         if html is None:
             failed.append(race_id)
+            failed_log.write_text("\n".join(failed), encoding="utf-8")
         else:
             save_gz(path, html)
             saved.append(race_id)
+            saved_log.write_text("\n".join(saved), encoding="utf-8")
 
         await asyncio.sleep(random.uniform(sleep_min, sleep_max))
         queue.task_done()
+        processed += 1
+        if restart_every > 0 and processed % restart_every == 0:
+            await ctx.close()
+            ctx, page = await new_page()
+
+    await ctx.close()
 
 
-async def run(year: int, out_dir: Path, log_dir: Path, skip: bool, concurrency: int,
-              sleep_min: float, sleep_max: float, headless: bool):
+async def run(
+    year: int,
+    out_dir: Path,
+    log_dir: Path,
+    skip: bool,
+    concurrency: int,
+    sleep_min: float,
+    sleep_max: float,
+    headless: bool,
+    restart_every: int,
+):
     out_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -167,6 +203,10 @@ async def run(year: int, out_dir: Path, log_dir: Path, skip: bool, concurrency: 
     saved: list[str] = []
     failed: list[str] = []
     date_failed: list[str] = []
+    saved_log = log_dir / f"race_{year}_saved.txt"
+    failed_log = log_dir / f"race_{year}_failed.txt"
+    saved_log.write_text("", encoding="utf-8")
+    failed_log.write_text("", encoding="utf-8")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
@@ -205,18 +245,11 @@ async def run(year: int, out_dir: Path, log_dir: Path, skip: bool, concurrency: 
 
         tasks = []
         for i in range(concurrency):
-            ctx = await browser.new_context(
-                user_agent=random.choice(USER_AGENTS),
-                locale="ja-JP",
-                timezone_id="Asia/Tokyo",
-            )
-            page = await ctx.new_page()
-
             task = asyncio.create_task(
                 scrape_race_html_worker(
                     name=f"W{i}",
                     queue=q,
-                    page=page,
+                    browser=browser,
                     out_dir=out_dir,
                     skip=skip,
                     max_retry=3,
@@ -224,10 +257,11 @@ async def run(year: int, out_dir: Path, log_dir: Path, skip: bool, concurrency: 
                     sleep_max=sleep_max,
                     saved=saved,
                     failed=failed,
+                    restart_every=restart_every,
+                    saved_log=saved_log,
+                    failed_log=failed_log,
                 )
             )
-            # ctx を task 終了後に閉じるためクロージャとして保持
-            task._ctx = ctx  # type: ignore[attr-defined]
             tasks.append(task)
 
         with tqdm(total=len(race_id_list), desc=f"race html {year}", leave=True) as pbar:
@@ -240,16 +274,11 @@ async def run(year: int, out_dir: Path, log_dir: Path, skip: bool, concurrency: 
                     done_prev = done_now
             await q.join()
 
-        # 後処理：context close
-        for t in tasks:
-            ctx = getattr(t, "_ctx", None)
-            if ctx is not None:
-                await ctx.close()
         await browser.close()
 
     # ログ出力
-    (log_dir / f"race_{year}_saved.txt").write_text("\n".join(saved), encoding="utf-8")
-    (log_dir / f"race_{year}_failed.txt").write_text("\n".join(failed), encoding="utf-8")
+    saved_log.write_text("\n".join(saved), encoding="utf-8")
+    failed_log.write_text("\n".join(failed), encoding="utf-8")
     (log_dir / f"race_{year}_date_failed.txt").write_text("\n".join(date_failed), encoding="utf-8")
 
     print(f"[done] year={year} race_ids={len(race_id_list)} saved={len(saved)} failed={len(failed)}")
@@ -269,6 +298,7 @@ def main():
     ap.add_argument("--concurrency", type=int, default=1)  # まずは1推奨
     ap.add_argument("--sleep-min", type=float, default=1.0)  # カレンダー/ID収集もあるので少し短め
     ap.add_argument("--sleep-max", type=float, default=2.0)
+    ap.add_argument("--restart-every", type=int, default=0)  # 0=無効, N件ごとにブラウザ再起動
     ap.add_argument("--headless", action="store_true", default=True)
     ap.add_argument("--headed", dest="headless", action="store_false")
     args = ap.parse_args()
@@ -285,6 +315,7 @@ def main():
             sleep_min=args.sleep_min,
             sleep_max=args.sleep_max,
             headless=args.headless,
+            restart_every=args.restart_every,
         )
     )
 
